@@ -40,7 +40,7 @@ public class EventMutationService<C : KlerkContext, V>(
         val result = klerk.handle(
             Command(
                 event = eventObj,
-                model = if (model == null) null else ModelID.from(model.value),
+                model = if (model == null) null else ModelID(model.value.toInt()),
                 params = paramsObject,
             ),
             context,
@@ -48,8 +48,10 @@ public class EventMutationService<C : KlerkContext, V>(
         )
         return when (result) {
             is CommandResult.Success -> toDataFetcherResult(result)
-            is CommandResult.Failure -> throw GraphqlErrorException.newErrorException()
-                .message(result.problem.toString()).build()
+            is CommandResult.Failure -> {
+                val message = requireNotNull(result.problems.first()).endUserTranslatedMessage
+                throw GraphqlErrorException.newErrorException().message(message).build()
+            }
         }
     }
 
@@ -66,7 +68,7 @@ public data class CreateCommandResponse(
 private fun <C:KlerkContext, V> toDataFetcherResult(result: CommandResult<Any, C, V>): DataFetcherResult<CreateCommandResponse?> {
     return when (result) {
         is CommandResult.Failure -> DataFetcherResult.newResult<CreateCommandResponse>()
-            .error(MyGraphQlError(result.problem)).build()
+            .error(MyGraphQlError(result.problems.first())).build()
 
         is CommandResult.Success -> DataFetcherResult.newResult<CreateCommandResponse>().data(
             CreateCommandResponse(
@@ -74,7 +76,7 @@ private fun <C:KlerkContext, V> toDataFetcherResult(result: CommandResult<Any, C
                 modifiedModels = result.modelsWithUpdatedProps.map { it.toString() },
                 deletedModels = result.deletedModels.map { it.toString() },
                 secondaryEvents = result.secondaryEvents.map { it.id() },
-                generatedJobs = result.jobs.map { it.id.toUInt().toString() }
+                generatedJobs = result.jobs.map { it.id?.toUInt().toString() }
             )
         ).build()
     }

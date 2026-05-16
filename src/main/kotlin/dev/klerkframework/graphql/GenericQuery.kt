@@ -73,7 +73,7 @@ public class GenericQuery<C : KlerkContext, V>(private val klerk: Klerk<C, V>, p
     public suspend fun model(id: ID, env: DataFetchingEnvironment): KlerkModel? {
         try {
             val context = contextFactory(env.graphQlContext)
-            val model = klerk.read(context) { getOrNull(ModelID.from(id.value)) } ?: return null
+            val model = klerk.read(context) { getOrNull(ModelID(id.value.toInt())) } ?: return null
             val events = klerk.read(context) { getPossibleEvents(model.id) }
             return KlerkModel.from(model, events, klerk)
         } catch (e: Exception) {

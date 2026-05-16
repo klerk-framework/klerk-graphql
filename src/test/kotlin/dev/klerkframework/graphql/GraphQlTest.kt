@@ -1,45 +1,44 @@
 package dev.klerkframework.graphql
 
+import dev.klerkframework.klerk.Klerk
+import dev.klerkframework.klerk.read.ModelModification.Created
+import dev.klerkframework.klerk.read.ModelModification.Deleted
+import dev.klerkframework.klerk.read.ModelModification.PropsUpdated
+import dev.klerkframework.klerk.read.ModelModification.Transitioned
 import com.expediagroup.graphql.server.ktor.DefaultKtorGraphQLContextFactory
 import com.expediagroup.graphql.server.ktor.GraphQL
 import com.expediagroup.graphql.server.ktor.graphQLGetRoute
 import com.expediagroup.graphql.server.ktor.graphQLPostRoute
 import com.expediagroup.graphql.server.ktor.graphQLSDLRoute
 import com.expediagroup.graphql.server.ktor.graphiQLRoute
-import dev.klerkframework.klerk.Klerk
-import dev.klerkframework.klerk.read.ModelModification.Created
-import dev.klerkframework.klerk.read.ModelModification.Deleted
-import dev.klerkframework.klerk.read.ModelModification.PropsUpdated
-import dev.klerkframework.klerk.read.ModelModification.Transitioned
 import graphql.GraphQLContext
 import io.ktor.server.application.install
 import io.ktor.server.netty.Netty
 import io.ktor.server.request.ApplicationRequest
 import io.ktor.server.routing.routing
 import kotlinx.coroutines.runBlocking
+import mu.KotlinLogging
 
-    /*
 fun main() {
 
-
+    val log = KotlinLogging.logger {}
+    log.info { "Starting" }
     val bc = BookCollections()
     val collections = MyCollections(bc, AuthorCollections(bc.all))
     val klerk = Klerk.create(createConfig(collections))
     runBlocking {
-
-
         klerk.meta.start()
 
         if (klerk.meta.modelsCount == 0) {
-            generateSampleData(50, 2, klerk)
+            //generateSampleData(50, 2, klerk)
         }
 
         val embeddedServer = io.ktor.server.engine.embeddedServer(Netty, port = 8080, host = "0.0.0.0") {
             install(GraphQL) {
                 schema {
-                    packages = listOf("dev.klerkframework.klerk.graphql")
+                    packages = listOf("dev.klerkframework.graphql")
                     queries = listOf(GenericQuery(klerk, ::contextFactory))
-                    mutations = listOf(EventMutationService(klerk, ::contextFactory))
+                    mutations = listOf(EventMutationService<Context, MyCollections>(klerk, ::contextFactory))
                 }
                 server {
                     contextFactory = CustomGraphQLContextFactory()
@@ -82,6 +81,3 @@ class CustomGraphQLContextFactory : DefaultKtorGraphQLContextFactory() {
         return super.generateContext(request)
     }
 }
-
-
-     */
