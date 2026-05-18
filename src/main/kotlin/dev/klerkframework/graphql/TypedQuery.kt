@@ -196,10 +196,15 @@ public class KlerkSchemaGeneratorHooks : SchemaGeneratorHooks {
                 return GraphQLScalarType.newScalar(Scalars.GraphQLInt).name(classifier.simpleName)
                     .coercing(containerCoercing { (it as IntContainer).value }).build()
             }
-            if (LongContainer::class.isSuperclassOf(classifier) ||
-//                ULongContainer::class.isSuperclassOf(classifier) ||
-                InstantContainer::class.isSuperclassOf(classifier) ||
-                DurationContainer::class.isSuperclassOf(classifier)) {
+            if (InstantContainer::class.isSuperclassOf(classifier)) {
+                return GraphQLScalarType.newScalar(Scalars.GraphQLString).name(classifier.simpleName)
+                    .coercing(containerCoercing { (it as InstantContainer).instant.toString() }).build()
+            }
+            if (DurationContainer::class.isSuperclassOf(classifier)) {
+                return GraphQLScalarType.newScalar(Scalars.GraphQLString).name(classifier.simpleName)
+                    .coercing(containerCoercing { (it as DurationContainer).duration.toString() }).build()
+            }
+            if (LongContainer::class.isSuperclassOf(classifier)) {
                 return GraphQLScalarType.newScalar(Scalars.GraphQLString).name(classifier.simpleName)
                     .coercing(containerCoercing { it.toString() }).build()
             }
@@ -217,7 +222,7 @@ public class KlerkSchemaGeneratorHooks : SchemaGeneratorHooks {
             }
         }
         return when (type.classifier) {
-            kotlin.time.Instant::class -> GraphQLScalarType.newScalar(Scalars.GraphQLString).name("Instant").description("A kotlinx Instant value serialized as a String").build()
+            kotlin.time.Instant::class -> GraphQLScalarType.newScalar(Scalars.GraphQLString).name("Instant").description("A kotlinx Instant value serialized as a String").coercing(containerCoercing { (it as kotlin.time.Instant).toString() }).build()
             kotlin.time.Duration::class -> GraphQLScalarType.newScalar(Scalars.GraphQLString).name("Duration").description("A kotlinx Duration value serialized as a String").build()
             ULong::class -> GraphQLScalarType.newScalar(Scalars.GraphQLString).name("ULong").description("A Kotlin ULong value serialized as a String").build()
             UInt::class -> GraphQLScalarType.newScalar(Scalars.GraphQLString).name("UInt").description("A Kotlin UInt value serialized as a String").build()

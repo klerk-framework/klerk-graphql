@@ -19,7 +19,10 @@ import dev.klerkframework.klerk.collection.ModelView
 import dev.klerkframework.klerk.datatypes.GeoPosition
 import dev.klerkframework.klerk.statemachine.StateMachine
 import dev.klerkframework.klerk.statemachine.stateMachine
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 data class Book(
@@ -122,8 +125,8 @@ fun newBook(args: ArgForVoidEvent<Book, CreateBookParams, Context, MyCollections
         tags = params.tags,
         salesPerYear = setOf(Quantity(43), Quantity(67)),
         averageScore = params.averageScore,
-        writtenAt = BookWrittenAt(Instant.fromEpochSeconds(100000)),
-        readingTime = ReadingTime(23.hours),
+        writtenAt = BookWrittenAt(Clock.System.now()),
+        readingTime = ReadingTime(23.hours + 11.minutes + 34.seconds),
         publishedAt = null,
         releasePartyPosition = ReleasePartyPosition(GeoPosition(latitude = 1.234, longitude = 3.456))
     )
