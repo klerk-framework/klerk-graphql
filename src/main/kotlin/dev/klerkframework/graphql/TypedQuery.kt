@@ -5,6 +5,7 @@ import com.expediagroup.graphql.generator.hooks.SchemaGeneratorHooks
 import com.expediagroup.graphql.generator.scalars.ID
 import dev.klerkframework.klerk.datatypes.*
 import graphql.Scalars
+import graphql.schema.Coercing
 import graphql.schema.GraphQLScalarType
 import com.expediagroup.graphql.server.operations.Query
 import dev.klerkframework.klerk.*
@@ -188,25 +189,31 @@ public class KlerkSchemaGeneratorHooks : SchemaGeneratorHooks {
         val classifier = type.classifier as? KClass<*>
         if (classifier != null) {
             if (StringContainer::class.isSuperclassOf(classifier)) {
-                return GraphQLScalarType.newScalar(Scalars.GraphQLString).name(classifier.simpleName).build()
+                return GraphQLScalarType.newScalar(Scalars.GraphQLString).name(classifier.simpleName)
+                    .coercing(containerCoercing { (it as StringContainer).value }).build()
             }
             if (IntContainer::class.isSuperclassOf(classifier)) {
-                return GraphQLScalarType.newScalar(Scalars.GraphQLInt).name(classifier.simpleName).build()
+                return GraphQLScalarType.newScalar(Scalars.GraphQLInt).name(classifier.simpleName)
+                    .coercing(containerCoercing { (it as IntContainer).value }).build()
             }
             if (LongContainer::class.isSuperclassOf(classifier) ||
 //                ULongContainer::class.isSuperclassOf(classifier) ||
                 InstantContainer::class.isSuperclassOf(classifier) ||
                 DurationContainer::class.isSuperclassOf(classifier)) {
-                return GraphQLScalarType.newScalar(Scalars.GraphQLString).name(classifier.simpleName).build()
+                return GraphQLScalarType.newScalar(Scalars.GraphQLString).name(classifier.simpleName)
+                    .coercing(containerCoercing { it.toString() }).build()
             }
             if (FloatContainer::class.isSuperclassOf(classifier)) {
-                return GraphQLScalarType.newScalar(Scalars.GraphQLFloat).name(classifier.simpleName).build()
+                return GraphQLScalarType.newScalar(Scalars.GraphQLFloat).name(classifier.simpleName)
+                    .coercing(containerCoercing { (it as FloatContainer).value }).build()
             }
             if (BooleanContainer::class.isSuperclassOf(classifier)) {
-                return GraphQLScalarType.newScalar(Scalars.GraphQLBoolean).name(classifier.simpleName).build()
+                return GraphQLScalarType.newScalar(Scalars.GraphQLBoolean).name(classifier.simpleName)
+                    .coercing(containerCoercing { (it as BooleanContainer).value }).build()
             }
             if (EnumContainer::class.isSuperclassOf(classifier)) {
-                return GraphQLScalarType.newScalar(Scalars.GraphQLString).name(classifier.simpleName).build()
+                return GraphQLScalarType.newScalar(Scalars.GraphQLString).name(classifier.simpleName)
+                    .coercing(containerCoercing { (it as EnumContainer<*>).value.toString() }).build()
             }
         }
         return when (type.classifier) {
@@ -219,6 +226,13 @@ public class KlerkSchemaGeneratorHooks : SchemaGeneratorHooks {
             else -> null
         }
     }
+
+    private fun containerCoercing(serialize: (Any) -> Any?): Coercing<Any, Any> =
+        object : Coercing<Any, Any> {
+            override fun serialize(dataFetcherResult: Any): Any? = serialize(dataFetcherResult)
+            override fun parseValue(input: Any): Any = input
+            override fun parseLiteral(input: Any): Any = input
+        }
 
     override fun willResolveMonad(type: KType): KType = when (type.classifier) {
         Set::class -> List::class.createType(type.arguments)

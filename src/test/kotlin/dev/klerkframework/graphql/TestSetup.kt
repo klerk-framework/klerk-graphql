@@ -349,7 +349,7 @@ suspend fun createBookHarryPotter1(klerk: Klerk<Context, MyCollections>, author:
                 coAuthors = emptySet(),
                 previousBooksInSameSeries = emptyList(),
                 tags = setOf(BookTag("Fiction"), BookTag("Children")),
-                averageScore = AverageScore(0f)
+                averageScore = AverageScore(3.5f)
             ),
         ),
         Context.system(),
