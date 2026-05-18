@@ -349,14 +349,14 @@ private fun resolveGraphQLType(kClass: KClass<*>?, scalarMap: MutableMap<String,
         kClass == kotlin.time.Duration::class -> getOrCreateScalar("Duration", Scalars.GraphQLString, scalarMap) { it.toString() }
         kClass == ULong::class -> getOrCreateScalar("ULong", Scalars.GraphQLString, scalarMap) { it.toString() }
         kClass == UInt::class -> getOrCreateScalar("UInt", Scalars.GraphQLString, scalarMap) { it.toString() }
-        StringContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar(kClass.simpleName!!, Scalars.GraphQLString, scalarMap) { (it as StringContainer).valueWithoutAuthorization }
-        IntContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar(kClass.simpleName!!, Scalars.GraphQLInt, scalarMap) { (it as IntContainer).valueWithoutAuthorization }
+        StringContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar(kClass.simpleName!!, Scalars.GraphQLString, scalarMap) { if (it is StringContainer) it.value else it.toString() }
+        IntContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar(kClass.simpleName!!, Scalars.GraphQLInt, scalarMap) { if (it is IntContainer) it.value else it }
         LongContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar(kClass.simpleName!!, Scalars.GraphQLString, scalarMap) { it.toString() }
-        FloatContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar(kClass.simpleName!!, Scalars.GraphQLFloat, scalarMap) { (it as FloatContainer).valueWithoutAuthorization }
-        BooleanContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar(kClass.simpleName!!, Scalars.GraphQLBoolean, scalarMap) { (it as BooleanContainer).valueWithoutAuthorization }
-        InstantContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar(kClass.simpleName!!, Scalars.GraphQLString, scalarMap) { (it as InstantContainer).instant.toString() }
-        DurationContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar(kClass.simpleName!!, Scalars.GraphQLString, scalarMap) { (it as DurationContainer).duration.toString() }
-        EnumContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar(kClass.simpleName!!, Scalars.GraphQLString, scalarMap) { (it as EnumContainer<*>).valueWithoutAuthorization.toString() }
+        FloatContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar(kClass.simpleName!!, Scalars.GraphQLFloat, scalarMap) { if (it is FloatContainer) it.value else it }
+        BooleanContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar(kClass.simpleName!!, Scalars.GraphQLBoolean, scalarMap) { if (it is BooleanContainer) it.value else it }
+        InstantContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar(kClass.simpleName!!, Scalars.GraphQLString, scalarMap) { if (it is InstantContainer) it.instant.toString() else it.toString() }
+        DurationContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar(kClass.simpleName!!, Scalars.GraphQLString, scalarMap) { if (it is DurationContainer) it.duration.toString() else it.toString() }
+        EnumContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar(kClass.simpleName!!, Scalars.GraphQLString, scalarMap) { if (it is EnumContainer<*>) it.value.toString() else it.toString() }
         kClass.java.isEnum -> Scalars.GraphQLString
         ModelID::class.isSuperclassOf(kClass) -> Scalars.GraphQLString
         else -> Scalars.GraphQLString
@@ -381,14 +381,15 @@ private fun getOrCreateScalar(
 private fun serializeValue(value: Any?): Any? {
     if (value == null) return null
     return when (value) {
-        is StringContainer -> try { value.valueWithoutAuthorization } catch (e: Exception) { null }
-        is IntContainer -> try { value.valueWithoutAuthorization } catch (e: Exception) { null }
-        is LongContainer -> try { value.valueWithoutAuthorization.toString() } catch (e: Exception) { null }
-        is FloatContainer -> try { value.valueWithoutAuthorization } catch (e: Exception) { null }
-        is BooleanContainer -> try { value.valueWithoutAuthorization } catch (e: Exception) { null }
+        is StringContainer -> try { value.toString() } catch (e: Exception) { null }
+        is IntContainer -> try { value.toString() } catch (e: Exception) { null }
+        is LongContainer -> try { value.toString() } catch (e: Exception) { null }
+        is FloatContainer -> try { value.toString() } catch (e: Exception) { null }
+        is BooleanContainer -> try { value.toString() } catch (e: Exception) { null }
         is InstantContainer -> try { value.instant.toString() } catch (e: Exception) { null }
         is DurationContainer -> try { value.duration.toString() } catch (e: Exception) { null }
-        is EnumContainer<*> -> try { value.valueWithoutAuthorization.toString() } catch (e: Exception) { null }
+        is GeoPositionContainer -> try { value.geoPosition.toString() } catch (e: Exception) { null }
+        is EnumContainer<*> -> try { value.value.toString() } catch (e: Exception) { null }
         is kotlin.time.Instant -> value.toString()
         is kotlin.time.Duration -> value.toString()
         is ModelID<*> -> value.toString()
