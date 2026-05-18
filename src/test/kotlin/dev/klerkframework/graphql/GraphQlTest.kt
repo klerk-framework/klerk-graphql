@@ -17,7 +17,32 @@ import io.ktor.server.netty.Netty
 import io.ktor.server.request.ApplicationRequest
 import io.ktor.server.routing.routing
 import kotlinx.coroutines.runBlocking
+import com.expediagroup.graphql.generator.scalars.ID
+import dev.klerkframework.graphql.models.Author
+import dev.klerkframework.graphql.models.Book
 import mu.KotlinLogging
+
+class AuthorModel(
+    id: ID, type: String, state: String, createdAt: String,
+    lastModifiedAt: String, lastPropsModifiedAt: String, lastStateTransitionAt: String,
+    props: Author, possibleEvents: List<KlerkCommand>
+) : TypedKlerkModel<Author>(id, type, state, createdAt, lastModifiedAt, lastPropsModifiedAt, lastStateTransitionAt, props, possibleEvents)
+
+class BookModel(
+    id: ID, type: String, state: String, createdAt: String,
+    lastModifiedAt: String, lastPropsModifiedAt: String, lastStateTransitionAt: String,
+    props: Book, possibleEvents: List<KlerkCommand>
+) : TypedKlerkModel<Book>(id, type, state, createdAt, lastModifiedAt, lastPropsModifiedAt, lastStateTransitionAt, props, possibleEvents)
+
+class AuthorQuery(
+    klerk: Klerk<Context, MyCollections>,
+    contextFactory: suspend (graphql.GraphQLContext) -> Context
+) : TypedKlerkQueryService<Context, MyCollections, Author, AuthorModel>(klerk, contextFactory, ::AuthorModel)
+
+class BookQuery(
+    klerk: Klerk<Context, MyCollections>,
+    contextFactory: suspend (graphql.GraphQLContext) -> Context
+) : TypedKlerkQueryService<Context, MyCollections, Book, BookModel>(klerk, contextFactory, ::BookModel)
 
 fun main() {
 
@@ -36,8 +61,13 @@ fun main() {
         val embeddedServer = io.ktor.server.engine.embeddedServer(Netty, port = 8080, host = "0.0.0.0") {
             install(GraphQL) {
                 schema {
-                    packages = listOf("dev.klerkframework.graphql")
-                    queries = listOf(GenericQuery(klerk, ::contextFactory))
+                    packages = listOf("dev.klerkframework.graphql", "dev.klerkframework.graphql.models")
+                    hooks = KlerkSchemaGeneratorHooks()
+                    queries = listOf(
+                        GenericQuery(klerk, ::contextFactory),
+                        AuthorQuery(klerk, ::contextFactory),
+                        BookQuery(klerk, ::contextFactory),
+                    )
                     mutations = listOf(EventMutationService<Context, MyCollections>(klerk, ::contextFactory))
                 }
                 server {
