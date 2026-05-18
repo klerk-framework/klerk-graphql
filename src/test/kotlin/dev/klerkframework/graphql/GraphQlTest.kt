@@ -61,7 +61,14 @@ fun main() {
         klerk.meta.start()
 
         if (klerk.meta.modelsCount == 0) {
-            //generateSampleData(50, 2, klerk)
+            createAuthorJKRowling(klerk)
+            createBookHarryPotter1(klerk, createAuthorJKRowling(klerk))
+            createBookHarryPotter2(
+                klerk,
+                createAuthorJKRowling(klerk),
+                listOf(createBookHarryPotter1(klerk, createAuthorJKRowling(klerk))),
+                setOf(createAuthorJKRowling(klerk))
+            )
         }
 
         val embeddedServer = io.ktor.server.engine.embeddedServer(Netty, port = 8080, host = "0.0.0.0") {

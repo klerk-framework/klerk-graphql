@@ -3,6 +3,7 @@ package dev.klerkframework.graphql
 import com.expediagroup.graphql.generator.annotations.GraphQLIgnore
 import com.expediagroup.graphql.generator.hooks.SchemaGeneratorHooks
 import com.expediagroup.graphql.generator.scalars.ID
+import dev.klerkframework.klerk.datatypes.*
 import graphql.Scalars
 import graphql.schema.GraphQLScalarType
 import com.expediagroup.graphql.server.operations.Query
@@ -17,6 +18,7 @@ import kotlin.reflect.KFunction
 import kotlin.reflect.KProperty
 import kotlin.reflect.KType
 import kotlin.reflect.full.createType
+import kotlin.reflect.full.isSuperclassOf
 
 /**
  * Base class for typed Klerk model wrappers. Subclass this for each model type to get a concrete
@@ -141,6 +143,7 @@ public abstract class TypedKlerkQueryService<C : KlerkContext, V, T : Any, W : T
  * (such as `Validatable`) which are not valid GraphQL types and should not be included in the schema.
  */
 public class KlerkSchemaGeneratorHooks : SchemaGeneratorHooks {
+    private val scalarCache = mutableMapOf<String, GraphQLScalarType>()
     override fun isValidSuperclass(kClass: KClass<*>): Boolean {
         val pkg = kClass.qualifiedName ?: ""
         if (pkg.startsWith("dev.klerkframework.klerk") && !pkg.startsWith("dev.klerkframework.graphql")) {
@@ -176,10 +179,45 @@ public class KlerkSchemaGeneratorHooks : SchemaGeneratorHooks {
         return type.arguments.any { it.type?.let { t -> containsKlerkType(t) } == true }
     }
 
-    override fun willGenerateGraphQLType(type: KType): GraphQLScalarType? = when (type.classifier) {
-        kotlin.time.Instant::class -> GraphQLScalarType.newScalar(Scalars.GraphQLString).name("Instant").description("A kotlinx Instant value serialized as a String").build()
-        kotlin.time.Duration::class -> GraphQLScalarType.newScalar(Scalars.GraphQLString).name("Duration").description("A kotlinx Duration value serialized as a String").build()
-        else -> null
+    override fun willGenerateGraphQLType(type: KType): GraphQLScalarType? {
+        val scalar = buildScalar(type)
+        return if (scalar != null) scalarCache.getOrPut(scalar.name) { scalar } else null
+    }
+
+    private fun buildScalar(type: KType): GraphQLScalarType? {
+        val classifier = type.classifier as? KClass<*>
+        if (classifier != null) {
+            if (StringContainer::class.isSuperclassOf(classifier)) {
+                return GraphQLScalarType.newScalar(Scalars.GraphQLString).name(classifier.simpleName).build()
+            }
+            if (IntContainer::class.isSuperclassOf(classifier)) {
+                return GraphQLScalarType.newScalar(Scalars.GraphQLInt).name(classifier.simpleName).build()
+            }
+            if (LongContainer::class.isSuperclassOf(classifier) ||
+//                ULongContainer::class.isSuperclassOf(classifier) ||
+                InstantContainer::class.isSuperclassOf(classifier) ||
+                DurationContainer::class.isSuperclassOf(classifier)) {
+                return GraphQLScalarType.newScalar(Scalars.GraphQLString).name(classifier.simpleName).build()
+            }
+            if (FloatContainer::class.isSuperclassOf(classifier)) {
+                return GraphQLScalarType.newScalar(Scalars.GraphQLFloat).name(classifier.simpleName).build()
+            }
+            if (BooleanContainer::class.isSuperclassOf(classifier)) {
+                return GraphQLScalarType.newScalar(Scalars.GraphQLBoolean).name(classifier.simpleName).build()
+            }
+            if (EnumContainer::class.isSuperclassOf(classifier)) {
+                return GraphQLScalarType.newScalar(Scalars.GraphQLString).name(classifier.simpleName).build()
+            }
+        }
+        return when (type.classifier) {
+            kotlin.time.Instant::class -> GraphQLScalarType.newScalar(Scalars.GraphQLString).name("Instant").description("A kotlinx Instant value serialized as a String").build()
+            kotlin.time.Duration::class -> GraphQLScalarType.newScalar(Scalars.GraphQLString).name("Duration").description("A kotlinx Duration value serialized as a String").build()
+            ULong::class -> GraphQLScalarType.newScalar(Scalars.GraphQLString).name("ULong").description("A Kotlin ULong value serialized as a String").build()
+            UInt::class -> GraphQLScalarType.newScalar(Scalars.GraphQLString).name("UInt").description("A Kotlin UInt value serialized as a String").build()
+            UShort::class -> GraphQLScalarType.newScalar(Scalars.GraphQLString).name("UShort").description("A Kotlin UShort value serialized as a String").build()
+            UByte::class -> GraphQLScalarType.newScalar(Scalars.GraphQLString).name("UByte").description("A Kotlin UByte value serialized as a String").build()
+            else -> null
+        }
     }
 
     override fun willResolveMonad(type: KType): KType = when (type.classifier) {
