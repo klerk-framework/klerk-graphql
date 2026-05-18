@@ -37,12 +37,18 @@ class BookModel(
 class AuthorQuery(
     klerk: Klerk<Context, MyCollections>,
     contextFactory: suspend (graphql.GraphQLContext) -> Context
-) : TypedKlerkQueryService<Context, MyCollections, Author, AuthorModel>(klerk, contextFactory, ::AuthorModel)
+) : TypedKlerkQueryService<Context, MyCollections, Author, AuthorModel>(klerk, contextFactory, ::AuthorModel) {
+    suspend fun author(id: com.expediagroup.graphql.generator.scalars.ID, env: graphql.schema.DataFetchingEnvironment): AuthorModel? = model(id, env)
+    suspend fun authors(collectionId: String, first: Int? = 10, after: String? = null, before: String? = null, env: graphql.schema.DataFetchingEnvironment): List<AuthorModel> = models(collectionId, first, after, before, env)
+}
 
 class BookQuery(
     klerk: Klerk<Context, MyCollections>,
     contextFactory: suspend (graphql.GraphQLContext) -> Context
-) : TypedKlerkQueryService<Context, MyCollections, Book, BookModel>(klerk, contextFactory, ::BookModel)
+) : TypedKlerkQueryService<Context, MyCollections, Book, BookModel>(klerk, contextFactory, ::BookModel) {
+    suspend fun book(id: com.expediagroup.graphql.generator.scalars.ID, env: graphql.schema.DataFetchingEnvironment): BookModel? = model(id, env)
+    suspend fun books(collectionId: String, first: Int? = 10, after: String? = null, before: String? = null, env: graphql.schema.DataFetchingEnvironment): List<BookModel> = models(collectionId, first, after, before, env)
+}
 
 fun main() {
 
