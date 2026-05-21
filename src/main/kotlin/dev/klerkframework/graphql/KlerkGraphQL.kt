@@ -131,11 +131,14 @@ private fun <C : KlerkContext, V> buildGraphQL(
     val scalarMap = mutableMapOf<String, GraphQLScalarType>()
     val typeMap = mutableMapOf<String, GraphQLObjectType>()
 
-    // Build a typed ObjectType for each managed model
+    // Build a typed ObjectType and WhereInput for each managed model
+    val whereInputMap = mutableMapOf<String, GraphQLInputObjectType>()
     for (managed in klerk.config.managedModels) {
         val propsType = buildPropsType(managed.kClass, scalarMap)
         val modelType = buildModelObjectType(managed.kClass.simpleName!!, propsType)
         typeMap[managed.kClass.simpleName!!] = modelType
+        val whereInput = buildWhereInputType(managed.kClass)
+        whereInputMap[managed.kClass.simpleName!!] = whereInput
     }
 
     // Shared types
@@ -216,6 +219,7 @@ private fun <C : KlerkContext, V> buildGraphQL(
             .argument { it.name("first").type(Scalars.GraphQLInt) }
             .argument { it.name("after").type(Scalars.GraphQLString) }
             .argument { it.name("before").type(Scalars.GraphQLString) }
+            .argument { it.name("where").type(Scalars.GraphQLString).description("JSON-encoded where filter, e.g. '{\"firstName\":{\"_eq\":\"Adam\"}}'" ) }
             .dataFetcher { env -> runBlocking { modelsDataFetcher(klerk, contextFactory, env) } }
     }
     queryBuilder.field { f ->
@@ -238,6 +242,7 @@ private fun <C : KlerkContext, V> buildGraphQL(
         val pluralName = "${singularName}s"
         val modelTypeName = "${typeName}KlerkModel"
         val kClass = managed.kClass
+        val whereInputType = whereInputMap[typeName]!!
 
         queryBuilder.field { f ->
             f.name(singularName)
@@ -252,6 +257,7 @@ private fun <C : KlerkContext, V> buildGraphQL(
                 .argument { it.name("first").type(Scalars.GraphQLInt) }
                 .argument { it.name("after").type(Scalars.GraphQLString) }
                 .argument { it.name("before").type(Scalars.GraphQLString) }
+                .argument { it.name("where").type(whereInputType).description("Hasura-style where filter") }
                 .dataFetcher { env -> runBlocking { typedModelsDataFetcher(klerk, contextFactory, kClass, env) } }
         }
     }
@@ -277,6 +283,7 @@ private fun <C : KlerkContext, V> buildGraphQL(
     // Register all additional types
     val additionalTypes = mutableSetOf<GraphQLType>()
     additionalTypes.addAll(typeMap.values)
+    additionalTypes.addAll(whereInputMap.values)
     additionalTypes.add(klerkCommandType)
     additionalTypes.add(klerkParameterType)
     additionalTypes.add(klerkCollectionType)
@@ -424,12 +431,17 @@ private suspend fun <C : KlerkContext, V> modelsDataFetcher(
     val first = env.getArgument<Int?>("first") ?: 10
     val after = env.getArgument<String?>("after")
     val before = env.getArgument<String?>("before")
+    val whereJson = env.getArgument<String?>("where")
+    val whereMap: Map<String, Any>? = if (whereJson != null) {
+        @Suppress("UNCHECKED_CAST")
+        jackson.readValue(whereJson, Map::class.java) as Map<String, Any>
+    } else null
     require(!(after != null && before != null))
     var cursor = after?.let { QueryListCursor.fromString(it) }
     if (before != null) cursor = QueryListCursor.fromString(before!!)
     val collection = klerk.config.getCollection(CollectionId.from(collectionId))
     val result = klerk.read(context) { query(collection, QueryOptions(maxItems = first, cursor)) }
-    val edges = result.items.map { item ->
+    val edges = result.items.filter { whereMap == null || matchesWhere(it.props, whereMap) }.map { item ->
         val possibleEvents = klerk.read(context) { getPossibleEvents(item.id) }
         val node = genericModelMap(item, possibleEvents, klerk)
         val edgeCursor = QueryListCursor(after = item.createdAt).toString()
@@ -495,12 +507,14 @@ private suspend fun <C : KlerkContext, V> typedModelsDataFetcher(
     val first = env.getArgument<Int?>("first") ?: 10
     val after = env.getArgument<String?>("after")
     val before = env.getArgument<String?>("before")
+    @Suppress("UNCHECKED_CAST")
+    val whereMap = env.getArgument<Map<String, Any>?>("where")
     require(!(after != null && before != null))
     var cursor = after?.let { QueryListCursor.fromString(it) }
     if (before != null) cursor = QueryListCursor.fromString(before!!)
     val collection = klerk.config.getCollection(CollectionId.from(collectionId))
     val result = klerk.read(context) { query(collection, QueryOptions(maxItems = first, cursor)) }
-    return result.items.map { item ->
+    return result.items.filter { whereMap == null || matchesWhere(it.props, whereMap) }.map { item ->
         val possibleEvents = klerk.read(context) { getPossibleEvents(item.id) }
         typedModelMap(item, possibleEvents, klerk)
     }
@@ -553,6 +567,133 @@ private fun <C : KlerkContext, V> genericModelMap(
         "props" to props,
         "possibleEvents" to commands
     )
+}
+
+// ---------------------------------------------------------------------------
+// Filter support (Hasura-style where)
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds a per-model WhereInput type with per-field comparison expression input types.
+ * Each field gets a `<TypeName><FieldName>ComparisonExp` input type with operators:
+ * `_eq`, `_neq`, `_gt`, `_lt`, `_gte`, `_lte`, `_like`, `_ilike`, `_in`, `_is_null`.
+ * The WhereInput also supports `_and`, `_or`, `_not` for boolean composition.
+ */
+internal fun buildWhereInputType(kClass: KClass<*>): GraphQLInputObjectType {
+    val typeName = kClass.simpleName!!
+    val whereTypeName = "${typeName}WhereInput"
+    val builder = GraphQLInputObjectType.newInputObject().name(whereTypeName)
+
+    for (prop in kClass.memberProperties) {
+        val compExpName = "${typeName}${prop.name.replaceFirstChar { it.uppercase() }}ComparisonExp"
+        val compExp = GraphQLInputObjectType.newInputObject().name(compExpName)
+            .field { it.name("_eq").type(Scalars.GraphQLString) }
+            .field { it.name("_neq").type(Scalars.GraphQLString) }
+            .field { it.name("_gt").type(Scalars.GraphQLString) }
+            .field { it.name("_lt").type(Scalars.GraphQLString) }
+            .field { it.name("_gte").type(Scalars.GraphQLString) }
+            .field { it.name("_lte").type(Scalars.GraphQLString) }
+            .field { it.name("_like").type(Scalars.GraphQLString) }
+            .field { it.name("_ilike").type(Scalars.GraphQLString) }
+            .field { it.name("_in").type(GraphQLList.list(GraphQLNonNull.nonNull(Scalars.GraphQLString))) }
+            .field { it.name("_is_null").type(Scalars.GraphQLBoolean) }
+            .build()
+        builder.field { it.name(prop.name).type(compExp) }
+    }
+
+    // Boolean operators
+    builder.field { it.name("_and").type(GraphQLList.list(GraphQLTypeReference(whereTypeName))) }
+    builder.field { it.name("_or").type(GraphQLList.list(GraphQLTypeReference(whereTypeName))) }
+    builder.field { it.name("_not").type(GraphQLTypeReference(whereTypeName)) }
+
+    return builder.build()
+}
+
+/**
+ * Evaluates a Hasura-style where map against a props object.
+ * The map may contain field names (each mapping to a comparison-exp map) and/or
+ * `_and`, `_or`, `_not` boolean operators.
+ */
+@Suppress("UNCHECKED_CAST")
+internal fun matchesWhere(props: Any, where: Map<String, Any?>): Boolean {
+    for ((key, value) in where) {
+        when (key) {
+            "_and" -> {
+                val list = value as? List<Map<String, Any?>> ?: continue
+                if (!list.all { matchesWhere(props, it) }) return false
+            }
+            "_or" -> {
+                val list = value as? List<Map<String, Any?>> ?: continue
+                if (list.isNotEmpty() && !list.any { matchesWhere(props, it) }) return false
+            }
+            "_not" -> {
+                val sub = value as? Map<String, Any?> ?: continue
+                if (matchesWhere(props, sub)) return false
+            }
+            else -> {
+                // key is a field name
+                val compExp = value as? Map<String, Any?> ?: continue
+                val prop = props::class.memberProperties.find { it.name == key } ?: return false
+                val rawValue = try {
+                    (prop as kotlin.reflect.KProperty1<Any, *>).get(props)
+                } catch (e: Exception) {
+                    return false
+                }
+                if (!matchesComparisonExp(rawValue, compExp)) return false
+            }
+        }
+    }
+    return true
+}
+
+@Suppress("UNCHECKED_CAST")
+private fun matchesComparisonExp(rawValue: Any?, compExp: Map<String, Any?>): Boolean {
+    for ((op, opValue) in compExp) {
+        when (op) {
+            "_is_null" -> {
+                val expectNull = opValue as? Boolean ?: continue
+                val isNull = rawValue == null
+                if (expectNull != isNull) return false
+            }
+            "_in" -> {
+                val list = opValue as? List<*> ?: continue
+                val strValue = serializeValue(rawValue)?.toString()
+                if (strValue !in list.map { it?.toString() }) return false
+            }
+            else -> {
+                val strValue = serializeValue(rawValue)?.toString() ?: return false
+                val cmpValue = opValue?.toString() ?: return false
+                val matches = when (op) {
+                    "_eq" -> strValue == cmpValue
+                    "_neq" -> strValue != cmpValue
+                    "_gt" -> strValue > cmpValue
+                    "_lt" -> strValue < cmpValue
+                    "_gte" -> strValue >= cmpValue
+                    "_lte" -> strValue <= cmpValue
+                    "_like" -> likeToRegex(cmpValue).matches(strValue)
+                    "_ilike" -> likeToRegex(cmpValue, ignoreCase = true).matches(strValue)
+                    else -> true
+                }
+                if (!matches) return false
+            }
+        }
+    }
+    return true
+}
+
+private fun likeToRegex(pattern: String, ignoreCase: Boolean = false): Regex {
+    val regexStr = buildString {
+        append("^")
+        for (ch in pattern) {
+            when (ch) {
+                '%' -> append(".*")
+                '_' -> append(".")
+                else -> append(Regex.escape(ch.toString()))
+            }
+        }
+        append("$")
+    }
+    return if (ignoreCase) Regex(regexStr, RegexOption.IGNORE_CASE) else Regex(regexStr)
 }
 
 private fun commandToMap(
