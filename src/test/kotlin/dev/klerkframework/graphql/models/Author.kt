@@ -6,14 +6,11 @@ import dev.klerkframework.graphql.AuthorStates
 import dev.klerkframework.graphql.AuthorStates.Amateur
 import dev.klerkframework.graphql.AuthorStates.Established
 import dev.klerkframework.graphql.AuthorStates.Improving
-import dev.klerkframework.graphql.AverageScore
-import dev.klerkframework.graphql.BookTag
-import dev.klerkframework.graphql.BookTitle
 import dev.klerkframework.graphql.Context
 import dev.klerkframework.graphql.EvenIntContainer
 import dev.klerkframework.graphql.FirstName
 import dev.klerkframework.graphql.LastName
-import dev.klerkframework.graphql.MyCollections
+import dev.klerkframework.graphql.MyViews
 import dev.klerkframework.graphql.MyJob
 import dev.klerkframework.graphql.MyOtherJob
 import dev.klerkframework.graphql.PhoneNumber
@@ -56,7 +53,7 @@ data class Author(val firstName: FirstName, val lastName: LastName, val address:
     override fun toString(): String = "$firstName $lastName"
 }
 
-fun authorStateMachine(collections: MyCollections): StateMachine<Author, AuthorStates, Context, MyCollections> =
+fun authorStateMachine(collections: MyViews): StateMachine<Author, AuthorStates, Context, MyViews> =
 
     stateMachine {
 
@@ -162,49 +159,49 @@ fun authorStateMachine(collections: MyCollections): StateMachine<Author, AuthorS
 
     }
 
-fun someUpdate(args: ArgForInstanceNonEvent<Author, Context, MyCollections>): Author {
+fun someUpdate(args: ArgForInstanceNonEvent<Author, Context, MyViews>): Author {
     return args.model.props.copy(lastName = LastName("efter"))
 }
 
-fun onExitUpdate(args: ArgForInstanceNonEvent<Author, Context, MyCollections>): Author {
+fun onExitUpdate(args: ArgForInstanceNonEvent<Author, Context, MyViews>): Author {
     return args.model.props.copy(FirstName("Changed name after exit"))
 }
 
-fun sayHello(args: ArgForInstanceNonEvent<Author, Context, MyCollections>) {
+fun sayHello(args: ArgForInstanceNonEvent<Author, Context, MyViews>) {
     println("Hello!")
 }
 
-fun later(args: ArgForInstanceNonEvent<Author, Context, MyCollections>): Instant {
+fun later(args: ArgForInstanceNonEvent<Author, Context, MyViews>): Instant {
     return args.time.plus(30.seconds)
 }
 
-fun hasTalent(args: ArgForInstanceNonEvent<Author, Context, MyCollections>): Boolean = true
-fun isAnImpostor(args: ArgForInstanceNonEvent<Author, Context, MyCollections>): Boolean = false
+fun hasTalent(args: ArgForInstanceNonEvent<Author, Context, MyViews>): Boolean = true
+fun isAnImpostor(args: ArgForInstanceNonEvent<Author, Context, MyViews>): Boolean = false
 
-fun aJob(args: ArgForInstanceNonEvent<Author, Context, MyCollections>): List<RunnableJob<Context, MyCollections>> {
+fun aJob(args: ArgForInstanceNonEvent<Author, Context, MyViews>): List<RunnableJob<Context, MyViews>> {
     return listOf(MyJob())
 }
 
 
-fun onEnterImprovingStateAction(args: ArgForInstanceNonEvent<Author, Context, MyCollections>) {
+fun onEnterImprovingStateAction(args: ArgForInstanceNonEvent<Author, Context, MyViews>) {
     if (onEnterImprovingStateActionCallback != null) {
         onEnterImprovingStateActionCallback!!()
     }
 }
 
 
-fun showNotification(args: ArgForInstanceEvent<Author, Nothing?, Context, MyCollections>) {
+fun showNotification(args: ArgForInstanceEvent<Author, Nothing?, Context, MyViews>) {
     println("It was decided that we should show a notification")
 }
 
-fun onEnterAmateurStateAction(args: ArgForInstanceNonEvent<Author, Context, MyCollections>) {
+fun onEnterAmateurStateAction(args: ArgForInstanceNonEvent<Author, Context, MyViews>) {
     if (onEnterAmateurStateActionCallback != null) {
         onEnterAmateurStateActionCallback!!()
     }
 }
 
 
-fun notifyBookStores(args: ArgForInstanceEvent<Author, ChangeNameParams, Context, MyCollections>): List<RunnableJob<Context, MyCollections>> {
+fun notifyBookStores(args: ArgForInstanceEvent<Author, ChangeNameParams, Context, MyViews>): List<RunnableJob<Context, MyViews>> {
     return listOf(MyOtherJob(""))
 }
 
@@ -244,7 +241,7 @@ object ImproveAuthor : InstanceEventNoParameters<Author>(Author::class, EXTERNAL
 
 object ChangeName : InstanceEventWithParameters<Author, ChangeNameParams>(Author::class, EXTERNAL, ChangeNameParams::class)
 
-fun changeNameOfAuthor(args: ArgForInstanceEvent<Author, ChangeNameParams, Context, MyCollections>): Author {
+fun changeNameOfAuthor(args: ArgForInstanceEvent<Author, ChangeNameParams, Context, MyViews>): Author {
     return args.model.props.copy(
         firstName = args.command.params.updatedFirstName,
         lastName = args.command.params.updatedLastName
@@ -253,7 +250,7 @@ fun changeNameOfAuthor(args: ArgForInstanceEvent<Author, ChangeNameParams, Conte
 
 object CreateAuthorTheAdvancedWay : VoidEventWithParameters<Author, AdvancedParams>(Author::class, EXTERNAL, AdvancedParams::class)
 
-fun newAuthorFromAdvancedParams(args: ArgForVoidEvent<Author, AdvancedParams, Context, MyCollections>): Author {
+fun newAuthorFromAdvancedParams(args: ArgForVoidEvent<Author, AdvancedParams, Context, MyViews>): Author {
     println("Doing something with ${args.command.params.titles.joinToString { it.title.value }} and ${args.command.params.averageScore.value}")
     return Author(
         firstName = FirstName("Advanced"),

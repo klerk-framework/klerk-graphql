@@ -1,6 +1,13 @@
 package dev.klerkframework.graphql
 
+import dev.klerkframework.graphql.models.CreateShop
+import dev.klerkframework.graphql.models.CreateShopParams
+import dev.klerkframework.graphql.models.FaxNumber
 import dev.klerkframework.klerk.Klerk
+import dev.klerkframework.klerk.collection.ModelViews
+import dev.klerkframework.klerk.command.Command
+import dev.klerkframework.klerk.command.CommandToken
+import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.read.ModelModification.Created
 import dev.klerkframework.klerk.read.ModelModification.Deleted
 import dev.klerkframework.klerk.read.ModelModification.PropsUpdated
@@ -16,8 +23,8 @@ fun main() {
     val log = KotlinLogging.logger {}
     log.info { "Starting" }
     val bc = BookCollections()
-    val collections = MyCollections(bc, AuthorCollections(bc.all))
-    val klerk = Klerk.create(createConfig(collections))
+    val views = MyViews(bc, AuthorCollections(bc.all), ModelViews())
+    val klerk = Klerk.create(createConfig(views))
     runBlocking {
         klerk.meta.start()
 
@@ -30,6 +37,7 @@ fun main() {
                 listOf(createBookHarryPotter1(klerk, createAuthorJKRowling(klerk))),
                 setOf(createAuthorJKRowling(klerk))
             )
+            createShop(klerk)
         }
 
         val embeddedServer = io.ktor.server.engine.embeddedServer(Netty, port = 8080, host = "0.0.0.0") {
@@ -62,3 +70,16 @@ fun main() {
 }
 
 private fun contextFactory(graphQlContext: GraphQLContext) = Context.unauthenticated()
+
+private suspend fun createShop(klerk: Klerk<Context, MyViews>) {
+    klerk.handle(Command(
+        event = CreateShop,
+        model = null,
+        params = CreateShopParams(
+            faxNumber = null
+        )
+    ),
+        Context.system(),
+        ProcessingOptions(CommandToken.simple())
+    )
+}

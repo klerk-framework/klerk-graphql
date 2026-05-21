@@ -5,7 +5,7 @@ import dev.klerkframework.graphql.BookTag
 import dev.klerkframework.graphql.BookTitle
 import dev.klerkframework.graphql.BookWrittenAt
 import dev.klerkframework.graphql.Context
-import dev.klerkframework.graphql.MyCollections
+import dev.klerkframework.graphql.MyViews
 import dev.klerkframework.graphql.Quantity
 import dev.klerkframework.graphql.ReadingTime
 import dev.klerkframework.graphql.ReleasePartyPosition
@@ -23,7 +23,6 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
-import kotlin.time.Instant
 
 data class Book(
     val title: BookTitle,
@@ -46,7 +45,7 @@ enum class BookStates {
     Published,
 }
 
-fun bookStateMachine(allAuthors: ModelView<Author, Context>, collections: MyCollections): StateMachine<Book, BookStates, Context, MyCollections> =
+fun bookStateMachine(allAuthors: ModelView<Author, Context>, collections: MyViews): StateMachine<Book, BookStates, Context, MyViews> =
     stateMachine {
 
         event(CreateBook) {
@@ -110,12 +109,12 @@ data class AdvancedParams(
 
 data class SimpleParamsPart(val title: BookTitle)
 
-fun setPublishTime(args: ArgForInstanceEvent<Book, Nothing?, Context, MyCollections>): Book {
+fun setPublishTime(args: ArgForInstanceEvent<Book, Nothing?, Context, MyViews>): Book {
     return args.model.props.copy(publishedAt = BookWrittenAt(args.context.time))
 }
 
 
-fun newBook(args: ArgForVoidEvent<Book, CreateBookParams, Context, MyCollections>): Book {
+fun newBook(args: ArgForVoidEvent<Book, CreateBookParams, Context, MyViews>): Book {
     val params = args.command.params
     return Book(
         title = params.title,
