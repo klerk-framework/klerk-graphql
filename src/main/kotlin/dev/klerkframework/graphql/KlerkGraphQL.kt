@@ -369,13 +369,13 @@ private fun resolveGraphQLType(kClass: KClass<*>?, scalarMap: MutableMap<String,
         kClass == kotlin.time.Duration::class -> getOrCreateScalar("Duration", Scalars.GraphQLString, scalarMap) { it.toString() }
         kClass == ULong::class -> getOrCreateScalar("ULong", Scalars.GraphQLString, scalarMap) { it.toString() }
         kClass == UInt::class -> getOrCreateScalar("UInt", Scalars.GraphQLString, scalarMap) { it.toString() }
-        StringContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar(kClass.simpleName!!, Scalars.GraphQLString, scalarMap) { if (it is StringContainer) it.value else it.toString() }
-        IntContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar(kClass.simpleName!!, Scalars.GraphQLInt, scalarMap) { if (it is IntContainer) it.value else it }
-        LongContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar(kClass.simpleName!!, Scalars.GraphQLString, scalarMap) { it.toString() }
-        FloatContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar(kClass.simpleName!!, Scalars.GraphQLFloat, scalarMap) { if (it is FloatContainer) it.value else it }
-        BooleanContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar(kClass.simpleName!!, Scalars.GraphQLBoolean, scalarMap) { if (it is BooleanContainer) it.value else it }
-        InstantContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar(kClass.simpleName!!, Scalars.GraphQLString, scalarMap) { if (it is InstantContainer) it.instant.toString() else it.toString() }
-        DurationContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar(kClass.simpleName!!, Scalars.GraphQLString, scalarMap) { if (it is DurationContainer) it.duration.toString() else it.toString() }
+        StringContainer::class.isSuperclassOf(kClass) -> Scalars.GraphQLString
+        IntContainer::class.isSuperclassOf(kClass) -> Scalars.GraphQLInt
+        LongContainer::class.isSuperclassOf(kClass) -> Scalars.GraphQLString
+        FloatContainer::class.isSuperclassOf(kClass) -> Scalars.GraphQLFloat
+        BooleanContainer::class.isSuperclassOf(kClass) -> Scalars.GraphQLBoolean
+        InstantContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar("Instant", Scalars.GraphQLString, scalarMap) { (it as kotlin.time.Instant).toString() }
+        DurationContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar("Duration", Scalars.GraphQLString, scalarMap) { it.toString() }
         EnumContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar(kClass.simpleName!!, Scalars.GraphQLString, scalarMap) { if (it is EnumContainer<*>) it.value.toString() else it.toString() }
         kClass.java.isEnum -> Scalars.GraphQLString
         ModelID::class.isSuperclassOf(kClass) -> Scalars.GraphQLString
