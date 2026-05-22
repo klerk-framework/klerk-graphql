@@ -129,12 +129,13 @@ private fun <C : KlerkContext, V> buildGraphQL(
     contextFactory: suspend (GraphQLContext) -> C
 ): GraphQL {
     val scalarMap = mutableMapOf<String, GraphQLScalarType>()
+    val enumTypeMap = mutableMapOf<String, GraphQLEnumType>()
     val typeMap = mutableMapOf<String, GraphQLObjectType>()
 
     // Build a typed ObjectType and WhereInput for each managed model
     val whereInputMap = mutableMapOf<String, GraphQLInputObjectType>()
     for (managed in klerk.config.managedModels) {
-        val propsType = buildPropsType(managed.kClass, scalarMap)
+        val propsType = buildPropsType(managed.kClass, scalarMap, enumTypeMap)
         val modelType = buildModelObjectType(managed.kClass.simpleName!!, propsType)
         typeMap[managed.kClass.simpleName!!] = modelType
         val whereInput = buildWhereInputType(managed.kClass)
@@ -307,6 +308,7 @@ private fun <C : KlerkContext, V> buildGraphQL(
     additionalTypes.add(createCommandResponseType)
     additionalTypes.add(stringComparisonExpType)
     additionalTypes.addAll(scalarMap.values)
+    additionalTypes.addAll(enumTypeMap.values)
 
     schemaBuilder.additionalTypes(additionalTypes)
 
@@ -317,11 +319,11 @@ private fun <C : KlerkContext, V> buildGraphQL(
 // Per-model typed ObjectType builders
 // ---------------------------------------------------------------------------
 
-private fun buildPropsType(kClass: KClass<*>, scalarMap: MutableMap<String, GraphQLScalarType>): GraphQLObjectType {
+private fun buildPropsType(kClass: KClass<*>, scalarMap: MutableMap<String, GraphQLScalarType>, enumTypeMap: MutableMap<String, GraphQLEnumType>): GraphQLObjectType {
     val typeName = "${kClass.simpleName!!}Props"
     val builder = GraphQLObjectType.newObject().name(typeName)
     for (prop in kClass.memberProperties) {
-        val fieldType = resolveGraphQLType(prop.returnType.classifier as? KClass<*>, scalarMap) ?: continue
+        val fieldType = resolveGraphQLType(prop.returnType.classifier as? KClass<*>, scalarMap, enumTypeMap) ?: continue
         builder.field { f ->
             f.name(prop.name).type(fieldType).dataFetcher { env ->
                 val obj = env.getSource<Any>()
@@ -357,7 +359,7 @@ private fun buildModelObjectType(typeName: String, propsType: GraphQLObjectType)
 // Type resolution helpers
 // ---------------------------------------------------------------------------
 
-private fun resolveGraphQLType(kClass: KClass<*>?, scalarMap: MutableMap<String, GraphQLScalarType>): GraphQLOutputType? {
+private fun resolveGraphQLType(kClass: KClass<*>?, scalarMap: MutableMap<String, GraphQLScalarType>, enumTypeMap: MutableMap<String, GraphQLEnumType> = mutableMapOf()): GraphQLOutputType? {
     if (kClass == null) return Scalars.GraphQLString
     return when {
         kClass == String::class -> Scalars.GraphQLString
@@ -374,10 +376,10 @@ private fun resolveGraphQLType(kClass: KClass<*>?, scalarMap: MutableMap<String,
         LongContainer::class.isSuperclassOf(kClass) -> Scalars.GraphQLString
         FloatContainer::class.isSuperclassOf(kClass) -> Scalars.GraphQLFloat
         BooleanContainer::class.isSuperclassOf(kClass) -> Scalars.GraphQLBoolean
-        InstantContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar("Instant", Scalars.GraphQLString, scalarMap) { (it as kotlin.time.Instant).toString() }
+        InstantContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar("Instant", Scalars.GraphQLString, scalarMap) { it.toString() }
         DurationContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar("Duration", Scalars.GraphQLString, scalarMap) { it.toString() }
-        EnumContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar(kClass.simpleName!!, Scalars.GraphQLString, scalarMap) { if (it is EnumContainer<*>) it.value.toString() else it.toString() }
-        kClass.java.isEnum -> Scalars.GraphQLString
+        EnumContainer::class.isSuperclassOf(kClass) -> getOrCreateEnumType(kClass, enumTypeMap)
+        kClass.java.isEnum -> getOrCreateEnumType(kClass, enumTypeMap)
         ModelID::class.isSuperclassOf(kClass) -> Scalars.GraphQLString
         else -> Scalars.GraphQLString
     }
@@ -395,6 +397,26 @@ private fun getOrCreateScalar(
             override fun parseValue(input: Any): Any = input
             override fun parseLiteral(input: Any): Any = (input as? StringValue)?.value ?: input
         }).build()
+    }
+}
+
+private fun getOrCreateEnumType(kClass: KClass<*>, enumTypeMap: MutableMap<String, GraphQLEnumType>): GraphQLEnumType {
+    // For EnumContainer subclasses, find the enum type via the supertype type argument
+    val enumClass: Class<*> = if (EnumContainer::class.isSuperclassOf(kClass)) {
+        val supertype = kClass.supertypes.firstOrNull { it.classifier == EnumContainer::class }
+        val enumKClass = supertype?.arguments?.firstOrNull()?.type?.classifier as? KClass<*>
+        enumKClass?.java ?: kClass.java
+    } else {
+        kClass.java
+    }
+    val enumName = enumClass.simpleName ?: kClass.simpleName!!
+    return enumTypeMap.getOrPut(enumName) {
+        val builder = GraphQLEnumType.newEnum().name(enumName)
+        @Suppress("UNCHECKED_CAST")
+        (enumClass.enumConstants ?: emptyArray()).forEach { constant ->
+            builder.value((constant as Enum<*>).name)
+        }
+        builder.build()
     }
 }
 

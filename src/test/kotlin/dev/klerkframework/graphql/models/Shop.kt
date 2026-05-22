@@ -7,7 +7,7 @@ import dev.klerkframework.klerk.EventVisibility.EXTERNAL
 import dev.klerkframework.klerk.InstanceEventNoParameters
 import dev.klerkframework.klerk.ModelID
 import dev.klerkframework.klerk.VoidEventWithParameters
-import dev.klerkframework.klerk.collection.ModelView
+import dev.klerkframework.klerk.datatypes.EnumContainer
 import dev.klerkframework.klerk.datatypes.StringContainer
 import dev.klerkframework.klerk.statemachine.StateMachine
 import dev.klerkframework.klerk.statemachine.stateMachine
@@ -15,6 +15,7 @@ import dev.klerkframework.klerk.statemachine.stateMachine
 data class Shop(
     val bestSellers: List<ModelID<Book>>,
     val faxNumber: FaxNumber?,
+    val shopSize: ShopSize,
 )
 
 enum class ShopStates {
@@ -57,7 +58,16 @@ class FaxNumber(value: String) : StringContainer(value) {
     override val maxLines = 1
 }
 
+enum class ShopSizeEnum {
+    Small,
+    Medium,
+    Large,
+}
+
+class ShopSize(value: ShopSizeEnum) : EnumContainer<ShopSizeEnum>(value) {
+}
+
 fun newShop(args: ArgForVoidEvent<Shop, CreateShopParams, Context, MyViews>): Shop {
     val params = args.command.params
-    return Shop(faxNumber = params.faxNumber, bestSellers = emptyList())
+    return Shop(faxNumber = params.faxNumber, bestSellers = emptyList(), shopSize = ShopSize(ShopSizeEnum.Small))
 }
