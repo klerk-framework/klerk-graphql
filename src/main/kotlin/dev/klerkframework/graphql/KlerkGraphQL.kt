@@ -203,6 +203,20 @@ private fun <C : KlerkContext, V> buildGraphQL(
         .field { it.name("secondaryEvents").type(GraphQLList.list(GraphQLNonNull.nonNull(Scalars.GraphQLString))) }
         .build()
 
+    // Shared comparison expression for state and createdAt
+    val stringComparisonExpType = GraphQLInputObjectType.newInputObject().name("StringComparisonExp")
+        .field { it.name("_eq").type(Scalars.GraphQLString) }
+        .field { it.name("_neq").type(Scalars.GraphQLString) }
+        .field { it.name("_gt").type(Scalars.GraphQLString) }
+        .field { it.name("_lt").type(Scalars.GraphQLString) }
+        .field { it.name("_gte").type(Scalars.GraphQLString) }
+        .field { it.name("_lte").type(Scalars.GraphQLString) }
+        .field { it.name("_like").type(Scalars.GraphQLString) }
+        .field { it.name("_ilike").type(Scalars.GraphQLString) }
+        .field { it.name("_in").type(GraphQLList.list(GraphQLNonNull.nonNull(Scalars.GraphQLString))) }
+        .field { it.name("_is_null").type(Scalars.GraphQLBoolean) }
+        .build()
+
     // Build Query type
     val queryBuilder = GraphQLObjectType.newObject().name("Query")
 
@@ -217,8 +231,6 @@ private fun <C : KlerkContext, V> buildGraphQL(
             .type(GraphQLTypeReference("KlerkModelsResponse"))
             .argument { it.name("collectionId").type(GraphQLNonNull.nonNull(Scalars.GraphQLString)) }
             .argument { it.name("first").type(Scalars.GraphQLInt) }
-            .argument { it.name("after").type(Scalars.GraphQLString) }
-            .argument { it.name("before").type(Scalars.GraphQLString) }
             .argument { it.name("where").type(Scalars.GraphQLString).description("JSON-encoded where filter, e.g. '{\"firstName\":{\"_eq\":\"Adam\"}}'" ) }
             .dataFetcher { env -> runBlocking { modelsDataFetcher(klerk, contextFactory, env) } }
     }
@@ -255,9 +267,9 @@ private fun <C : KlerkContext, V> buildGraphQL(
                 .type(GraphQLList.list(GraphQLNonNull.nonNull(GraphQLTypeReference(modelTypeName))))
                 .argument { it.name("collectionId").type(GraphQLNonNull.nonNull(Scalars.GraphQLString)) }
                 .argument { it.name("first").type(Scalars.GraphQLInt) }
-                .argument { it.name("after").type(Scalars.GraphQLString) }
-                .argument { it.name("before").type(Scalars.GraphQLString) }
-                .argument { it.name("where").type(whereInputType).description("Hasura-style where filter") }
+                .argument { it.name("state").type(stringComparisonExpType).description("Filter by model state") }
+                .argument { it.name("createdAt").type(stringComparisonExpType).description("Filter by createdAt timestamp") }
+                .argument { it.name("where").type(whereInputType).description("Filter on props") }
                 .dataFetcher { env -> runBlocking { typedModelsDataFetcher(klerk, contextFactory, kClass, env) } }
         }
     }
@@ -293,6 +305,7 @@ private fun <C : KlerkContext, V> buildGraphQL(
     additionalTypes.add(klerkEdgeType)
     additionalTypes.add(klerkModelsResponseType)
     additionalTypes.add(createCommandResponseType)
+    additionalTypes.add(stringComparisonExpType)
     additionalTypes.addAll(scalarMap.values)
 
     schemaBuilder.additionalTypes(additionalTypes)
@@ -429,18 +442,13 @@ private suspend fun <C : KlerkContext, V> modelsDataFetcher(
     val context = contextFactory(env.graphQlContext)
     val collectionId = env.getArgument<String>("collectionId")!!
     val first = env.getArgument<Int?>("first") ?: 10
-    val after = env.getArgument<String?>("after")
-    val before = env.getArgument<String?>("before")
     val whereJson = env.getArgument<String?>("where")
     val whereMap: Map<String, Any>? = if (whereJson != null) {
         @Suppress("UNCHECKED_CAST")
         jackson.readValue(whereJson, Map::class.java) as Map<String, Any>
     } else null
-    require(!(after != null && before != null))
-    var cursor = after?.let { QueryListCursor.fromString(it) }
-    if (before != null) cursor = QueryListCursor.fromString(before!!)
     val collection = klerk.config.getCollection(CollectionId.from(collectionId))
-    val result = klerk.read(context) { query(collection, QueryOptions(maxItems = first, cursor)) }
+    val result = klerk.read(context) { query(collection, QueryOptions(maxItems = first)) }
     val edges = result.items.filter { whereMap == null || matchesWhere(it.props, whereMap) }.map { item ->
         val possibleEvents = klerk.read(context) { getPossibleEvents(item.id) }
         val node = genericModelMap(item, possibleEvents, klerk)
@@ -505,16 +513,19 @@ private suspend fun <C : KlerkContext, V> typedModelsDataFetcher(
     val context = contextFactory(env.graphQlContext)
     val collectionId = env.getArgument<String>("collectionId")!!
     val first = env.getArgument<Int?>("first") ?: 10
-    val after = env.getArgument<String?>("after")
-    val before = env.getArgument<String?>("before")
     @Suppress("UNCHECKED_CAST")
     val whereMap = env.getArgument<Map<String, Any>?>("where")
-    require(!(after != null && before != null))
-    var cursor = after?.let { QueryListCursor.fromString(it) }
-    if (before != null) cursor = QueryListCursor.fromString(before!!)
+    @Suppress("UNCHECKED_CAST")
+    val stateFilter = env.getArgument<Map<String, Any>?>("state")
+    @Suppress("UNCHECKED_CAST")
+    val createdAtFilter = env.getArgument<Map<String, Any>?>("createdAt")
     val collection = klerk.config.getCollection(CollectionId.from(collectionId))
-    val result = klerk.read(context) { query(collection, QueryOptions(maxItems = first, cursor)) }
-    return result.items.filter { whereMap == null || matchesWhere(it.props, whereMap) }.map { item ->
+    val result = klerk.read(context) { query(collection, QueryOptions(maxItems = first)) }
+    return result.items.filter { item ->
+        (whereMap == null || matchesWhere(item.props, whereMap)) &&
+        (stateFilter == null || matchesComparisonExp(item.state, stateFilter)) &&
+        (createdAtFilter == null || matchesComparisonExp(item.createdAt.toString(), createdAtFilter))
+    }.map { item ->
         val possibleEvents = klerk.read(context) { getPossibleEvents(item.id) }
         typedModelMap(item, possibleEvents, klerk)
     }
@@ -569,10 +580,6 @@ private fun <C : KlerkContext, V> genericModelMap(
     )
 }
 
-// ---------------------------------------------------------------------------
-// Filter support (Hasura-style where)
-// ---------------------------------------------------------------------------
-
 /**
  * Builds a per-model WhereInput type with per-field comparison expression input types.
  * Each field gets a `<TypeName><FieldName>ComparisonExp` input type with operators:
@@ -610,7 +617,7 @@ internal fun buildWhereInputType(kClass: KClass<*>): GraphQLInputObjectType {
 }
 
 /**
- * Evaluates a Hasura-style where map against a props object.
+ * Evaluates a where map against a props object.
  * The map may contain field names (each mapping to a comparison-exp map) and/or
  * `_and`, `_or`, `_not` boolean operators.
  */
@@ -647,7 +654,7 @@ internal fun matchesWhere(props: Any, where: Map<String, Any?>): Boolean {
 }
 
 @Suppress("UNCHECKED_CAST")
-private fun matchesComparisonExp(rawValue: Any?, compExp: Map<String, Any?>): Boolean {
+internal fun matchesComparisonExp(rawValue: Any?, compExp: Map<String, Any?>): Boolean {
     for ((op, opValue) in compExp) {
         when (op) {
             "_is_null" -> {

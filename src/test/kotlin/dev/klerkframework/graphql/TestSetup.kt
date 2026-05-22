@@ -9,6 +9,7 @@ import dev.klerkframework.graphql.models.CreateBook
 import dev.klerkframework.graphql.models.CreateBookParams
 import dev.klerkframework.graphql.models.DeleteAuthor
 import dev.klerkframework.graphql.models.DeleteBook
+import dev.klerkframework.graphql.models.FaxNumber
 import dev.klerkframework.graphql.models.Shop
 import dev.klerkframework.graphql.models.authorStateMachine
 import dev.klerkframework.graphql.models.bookStateMachine
@@ -93,6 +94,7 @@ fun createConfig(views: MyViews, storage: Persistence = RamStorage()): Config<Co
                 }
                 negative {
                     rule(::cannotReadAstrid)
+                    rule(::cannotReadFax)
                 }
             }
             commands {
@@ -119,6 +121,10 @@ fun myContextProvider(systemIdentity: SystemIdentity): Context {
 
 fun cannotReadAstrid(args: ArgsForPropertyAuth<Context, MyViews>): NegativeAuthorization {
     return if (args.property is FirstName && args.property.valueWithoutAuthorization == "Astrid") Deny else Pass
+}
+
+fun cannotReadFax(args: ArgsForPropertyAuth<Context, MyViews>): NegativeAuthorization {
+    return if (args.property is FaxNumber) Deny else Pass
 }
 
 fun canReadAllProperties(args: ArgsForPropertyAuth<Context, MyViews>): PositiveAuthorization {
