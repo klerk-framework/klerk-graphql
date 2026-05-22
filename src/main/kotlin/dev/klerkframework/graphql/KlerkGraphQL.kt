@@ -124,6 +124,8 @@ private data class GraphQLRequest(
 // Schema builder
 // ---------------------------------------------------------------------------
 
+private const val KLERK_META = "Model"
+
 private fun <C : KlerkContext, V> buildGraphQL(
     klerk: Klerk<C, V>,
     contextFactory: suspend (GraphQLContext) -> C
@@ -167,14 +169,14 @@ private fun <C : KlerkContext, V> buildGraphQL(
         .field { it.name("value").type(Scalars.GraphQLString) }
         .build()
 
-    val genericModelType = GraphQLObjectType.newObject().name("KlerkModel")
+    val genericModelType = GraphQLObjectType.newObject().name(KLERK_META)
         .field { it.name("id").type(GraphQLNonNull.nonNull(Scalars.GraphQLString)) }
         .field { it.name("type").type(Scalars.GraphQLString) }
         .field { it.name("state").type(GraphQLNonNull.nonNull(Scalars.GraphQLString)) }
-        .field { it.name("createdAt").type(GraphQLNonNull.nonNull(Scalars.GraphQLString)) }
-        .field { it.name("lastModifiedAt").type(GraphQLNonNull.nonNull(Scalars.GraphQLString)) }
-        .field { it.name("lastPropsModifiedAt").type(GraphQLNonNull.nonNull(Scalars.GraphQLString)) }
-        .field { it.name("lastStateTransitionAt").type(GraphQLNonNull.nonNull(Scalars.GraphQLString)) }
+        .field { it.name("createdAt").type(GraphQLNonNull.nonNull(getOrCreateScalar("Instant", Scalars.GraphQLString, scalarMap) { (it as kotlin.time.Instant).toString() })) }
+        .field { it.name("lastModifiedAt").type(GraphQLNonNull.nonNull(getOrCreateScalar("Instant", Scalars.GraphQLString, scalarMap) { (it as kotlin.time.Instant).toString() })) }
+        .field { it.name("lastPropsModifiedAt").type(GraphQLNonNull.nonNull(getOrCreateScalar("Instant", Scalars.GraphQLString, scalarMap) { (it as kotlin.time.Instant).toString() })) }
+        .field { it.name("lastStateTransitionAt").type(GraphQLNonNull.nonNull(getOrCreateScalar("Instant", Scalars.GraphQLString, scalarMap) { (it as kotlin.time.Instant).toString() })) }
         .field { it.name("props").type(GraphQLList.list(GraphQLNonNull.nonNull(GraphQLTypeReference("KlerkField")))) }
         .field { it.name("possibleEvents").type(GraphQLList.list(GraphQLNonNull.nonNull(GraphQLTypeReference("KlerkCommand")))) }
         .build()
@@ -187,7 +189,7 @@ private fun <C : KlerkContext, V> buildGraphQL(
         .build()
 
     val klerkEdgeType = GraphQLObjectType.newObject().name("KlerkEdge")
-        .field { it.name("node").type(GraphQLTypeReference("KlerkModel")) }
+        .field { it.name("node").type(GraphQLTypeReference(KLERK_META)) }
         .field { it.name("cursor").type(GraphQLNonNull.nonNull(Scalars.GraphQLString)) }
         .build()
 
@@ -204,7 +206,6 @@ private fun <C : KlerkContext, V> buildGraphQL(
         .field { it.name("secondaryEvents").type(GraphQLList.list(GraphQLNonNull.nonNull(Scalars.GraphQLString))) }
         .build()
 
-    // Shared comparison expression for state and createdAt
     val stringComparisonExpType = GraphQLInputObjectType.newInputObject().name("StringComparisonExp")
         .field { it.name("_eq").type(Scalars.GraphQLString) }
         .field { it.name("_neq").type(Scalars.GraphQLString) }
@@ -237,7 +238,7 @@ private fun <C : KlerkContext, V> buildGraphQL(
     }
     queryBuilder.field { f ->
         f.name("model")
-            .type(GraphQLTypeReference("KlerkModel"))
+            .type(GraphQLTypeReference(KLERK_META))
             .argument { it.name("id").type(GraphQLNonNull.nonNull(Scalars.GraphQLString)) }
             .dataFetcher { env -> runBlocking { modelDataFetcher(klerk, contextFactory, env) } }
     }
@@ -253,7 +254,7 @@ private fun <C : KlerkContext, V> buildGraphQL(
         val typeName = managed.kClass.simpleName!!
         val singularName = typeName.replaceFirstChar { it.lowercase() }
         val pluralName = "${singularName}s"
-        val modelTypeName = "${typeName}KlerkModel"
+        val modelTypeName = "${typeName}Model"
         val kClass = managed.kClass
         val whereInputType = whereInputMap[typeName]!!
 
@@ -341,15 +342,15 @@ private fun buildPropsType(kClass: KClass<*>, scalarMap: MutableMap<String, Grap
 }
 
 private fun buildModelObjectType(typeName: String, propsType: GraphQLObjectType): GraphQLObjectType {
-    val modelTypeName = "${typeName}KlerkModel"
+    val modelTypeName = "${typeName}Model"
     return GraphQLObjectType.newObject().name(modelTypeName)
         .field { it.name("id").type(GraphQLNonNull.nonNull(Scalars.GraphQLString)) }
         .field { it.name("type").type(GraphQLNonNull.nonNull(Scalars.GraphQLString)) }
         .field { it.name("state").type(GraphQLNonNull.nonNull(Scalars.GraphQLString)) }
-        .field { it.name("createdAt").type(GraphQLNonNull.nonNull(Scalars.GraphQLString)) }
-        .field { it.name("lastModifiedAt").type(GraphQLNonNull.nonNull(Scalars.GraphQLString)) }
-        .field { it.name("lastPropsModifiedAt").type(GraphQLNonNull.nonNull(Scalars.GraphQLString)) }
-        .field { it.name("lastStateTransitionAt").type(GraphQLNonNull.nonNull(Scalars.GraphQLString)) }
+        .field { it.name("createdAt").type(GraphQLNonNull.nonNull(GraphQLTypeReference("Instant"))) }
+        .field { it.name("lastModifiedAt").type(GraphQLNonNull.nonNull(GraphQLTypeReference("Instant"))) }
+        .field { it.name("lastPropsModifiedAt").type(GraphQLNonNull.nonNull(GraphQLTypeReference("Instant"))) }
+        .field { it.name("lastStateTransitionAt").type(GraphQLNonNull.nonNull(GraphQLTypeReference("Instant"))) }
         .field { it.name("props").type(GraphQLNonNull.nonNull(propsType)) }
         .field { it.name("possibleEvents").type(GraphQLList.list(GraphQLNonNull.nonNull(GraphQLTypeReference("KlerkCommand")))) }
         .build()
@@ -563,10 +564,10 @@ private fun <C : KlerkContext, V> typedModelMap(
         "id" to model.id.toString(),
         "type" to (model.props::class.simpleName ?: ""),
         "state" to model.state,
-        "createdAt" to model.createdAt.toString(),
-        "lastModifiedAt" to model.lastModifiedAt.toString(),
-        "lastPropsModifiedAt" to model.lastPropsUpdateAt.toString(),
-        "lastStateTransitionAt" to model.lastStateTransitionAt.toString(),
+        "createdAt" to model.createdAt,
+        "lastModifiedAt" to model.lastModifiedAt,
+        "lastPropsModifiedAt" to model.lastPropsUpdateAt,
+        "lastStateTransitionAt" to model.lastStateTransitionAt,
         "props" to model.props,
         "possibleEvents" to commands
     )
@@ -593,10 +594,10 @@ private fun <C : KlerkContext, V> genericModelMap(
         "id" to model.id.toString(),
         "type" to model.props::class.simpleName,
         "state" to model.state,
-        "createdAt" to model.createdAt.toString(),
-        "lastModifiedAt" to model.lastModifiedAt.toString(),
-        "lastPropsModifiedAt" to model.lastPropsUpdateAt.toString(),
-        "lastStateTransitionAt" to model.lastStateTransitionAt.toString(),
+        "createdAt" to model.createdAt,
+        "lastModifiedAt" to model.lastModifiedAt,
+        "lastPropsModifiedAt" to model.lastPropsUpdateAt,
+        "lastStateTransitionAt" to model.lastStateTransitionAt,
         "props" to props,
         "possibleEvents" to commands
     )
