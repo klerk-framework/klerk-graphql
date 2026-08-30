@@ -2,11 +2,11 @@ import org.jetbrains.kotlin.gradle.dsl.ExplicitApiMode
 val kotlinLoggingVersion = "2.1.21"
 val slf4jVersion = "2.0.3"
 val graphqlJavaVersion = "23.1"
-val klerkVersion = "2026a39c06"
+val klerkVersion = "1.0.0-beta.7-SNAPSHOT"
 val ktorVersion = "3.2.3"
 val jacksonVersion = "2.19.1"
 plugins {
-    kotlin("jvm") version "2.3.10"
+    kotlin("jvm") version "2.4.10"
     `java-library`
     `maven-publish`
 }

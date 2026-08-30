@@ -3,8 +3,10 @@ package dev.klerkframework.graphql
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.collection.PageDirection
 import dev.klerkframework.klerk.collection.QueryListCursor
 import dev.klerkframework.klerk.collection.QueryOptions
+import dev.klerkframework.klerk.collection.QueryResponse
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
@@ -31,35 +33,28 @@ private val jackson = ObjectMapper().registerKotlinModule()
 private val graphQLKey = AttributeKey<GraphQL>("KlerkGraphQL")
 
 /**
- * Configuration for the KlerkGraphQL Ktor plugin.
+ * The key under which the request's [ApplicationCall] is stored in the [GraphQLContext] passed to `contextFactory`.
+ * Read it with [GraphQLContext.applicationCall] rather than looking it up directly.
  */
-public class KlerkGraphQLConfig<C : KlerkContext, V> {
-    internal var klerk: Klerk<C, V>? = null
-    internal var contextFactory: (suspend (GraphQLContext) -> C)? = null
+public object ApplicationCallContextKey
 
-    public fun klerk(klerk: Klerk<C, V>) {
-        this.klerk = klerk
-    }
-
-    public fun contextFactory(factory: suspend (GraphQLContext) -> C) {
-        this.contextFactory = factory
-    }
-}
+/** The [ApplicationCall] behind this request, e.g. to read cookies or headers when building a [KlerkContext]. */
+public fun GraphQLContext.applicationCall(): ApplicationCall? = get(ApplicationCallContextKey)
 
 /**
  * Installs the KlerkGraphQL plugin into a Ktor application.
  *
- * The GraphQL schema is generated dynamically from [Klerk.config.managedModels], so users do not
+ * The GraphQL schema is generated dynamically from [Klerk.spec.managedModels], so users do not
  * need to create per-model query classes. For each managed model type `Foo`, the schema will
  * automatically expose typed queries `foo(id)` and `foos(collectionId)` returning `FooKlerkModel`
  * objects with a strongly-typed `props: FooProps` field.
  *
+ * [contextFactory] receives the [GraphQLContext] of the request — use [GraphQLContext.applicationCall] to read
+ * cookies/headers off the underlying [ApplicationCall] when building an authenticated context.
+ *
  * Usage:
  * ```kotlin
- * install(KlerkGraphQL) {
- *     klerk(klerk)
- *     contextFactory { _ -> Context.unauthenticated() }
- * }
+ * installKlerkGraphQL(klerk) { graphQlContext -> Context.fromCall(graphQlContext.applicationCall()) }
  * routing {
  *     klerkGraphQLRoutes()
  * }
@@ -90,7 +85,7 @@ public fun Route.klerkGraphQLRoutes() {
             .query(request.query)
             .operationName(request.operationName)
             .variables(request.variables ?: emptyMap())
-            .graphQLContext(emptyMap<Any, Any>())
+            .graphQLContext(mapOf(ApplicationCallContextKey to call))
         val execInput = inputBuilder.build()
         val result = graphQL.executeAsync(execInput).get()
         call.respondText(jackson.writeValueAsString(result.toSpecification()), ContentType.Application.Json)
@@ -100,7 +95,7 @@ public fun Route.klerkGraphQLRoutes() {
         val query = call.request.queryParameters["query"] ?: ""
         val inputBuilder = ExecutionInput.newExecutionInput()
             .query(query)
-            .graphQLContext(emptyMap<Any, Any>())
+            .graphQLContext(mapOf(ApplicationCallContextKey to call))
         val execInput = inputBuilder.build()
         val result = graphQL.executeAsync(execInput).get()
         call.respondText(jackson.writeValueAsString(result.toSpecification()), ContentType.Application.Json)
@@ -136,7 +131,7 @@ private fun <C : KlerkContext, V> buildGraphQL(
 
     // Build a typed ObjectType and WhereInput for each managed model
     val whereInputMap = mutableMapOf<String, GraphQLInputObjectType>()
-    for (managed in klerk.config.managedModels) {
+    for (managed in klerk.spec.managedModels) {
         val propsType = buildPropsType(managed.kClass, scalarMap, enumTypeMap)
         val modelType = buildModelObjectType(managed.kClass.simpleName!!, propsType)
         typeMap[managed.kClass.simpleName!!] = modelType
@@ -193,9 +188,10 @@ private fun <C : KlerkContext, V> buildGraphQL(
         .field { it.name("cursor").type(GraphQLNonNull.nonNull(Scalars.GraphQLString)) }
         .build()
 
-    val klerkModelsResponseType = GraphQLObjectType.newObject().name("KlerkModelsResponse")
+    val klerkModelsResponseType = GraphQLObjectType.newObject().name("KlerkModelConnection")
         .field { it.name("edges").type(GraphQLList.list(GraphQLNonNull.nonNull(GraphQLTypeReference("KlerkEdge")))) }
         .field { it.name("pageInfo").type(GraphQLNonNull.nonNull(GraphQLTypeReference("PageInfo"))) }
+        .field { it.name("totalCount").type(Scalars.GraphQLInt).description("The size of the whole collection.") }
         .build()
 
     val createCommandResponseType = GraphQLObjectType.newObject().name("CreateCommandResponse")
@@ -230,10 +226,10 @@ private fun <C : KlerkContext, V> buildGraphQL(
     }
     queryBuilder.field { f ->
         f.name("models")
-            .type(GraphQLTypeReference("KlerkModelsResponse"))
+            .type(GraphQLTypeReference("KlerkModelConnection"))
             .argument { it.name("collectionId").type(GraphQLNonNull.nonNull(Scalars.GraphQLString)) }
-            .argument { it.name("first").type(Scalars.GraphQLInt) }
             .argument { it.name("where").type(Scalars.GraphQLString).description("JSON-encoded where filter, e.g. '{\"firstName\":{\"_eq\":\"Adam\"}}'" ) }
+            .also { addConnectionArguments(it) }
             .dataFetcher { env -> runBlocking { modelsDataFetcher(klerk, contextFactory, env) } }
     }
     queryBuilder.field { f ->
@@ -250,7 +246,8 @@ private fun <C : KlerkContext, V> buildGraphQL(
     }
 
     // Per-model typed queries: e.g. author(id) and authors(collectionId)
-    for (managed in klerk.config.managedModels) {
+    val connectionTypes = mutableSetOf<GraphQLType>()
+    for (managed in klerk.spec.managedModels) {
         val typeName = managed.kClass.simpleName!!
         val singularName = typeName.replaceFirstChar { it.lowercase() }
         val pluralName = "${singularName}s"
@@ -266,14 +263,29 @@ private fun <C : KlerkContext, V> buildGraphQL(
         }
         queryBuilder.field { f ->
             f.name(pluralName)
-                .type(GraphQLList.list(GraphQLNonNull.nonNull(GraphQLTypeReference(modelTypeName))))
+                .type(GraphQLTypeReference("${typeName}Connection"))
                 .argument { it.name("collectionId").type(GraphQLNonNull.nonNull(Scalars.GraphQLString)) }
-                .argument { it.name("first").type(Scalars.GraphQLInt) }
                 .argument { it.name("state").type(stringComparisonExpType).description("Filter by model state") }
                 .argument { it.name("createdAt").type(stringComparisonExpType).description("Filter by createdAt timestamp") }
                 .argument { it.name("where").type(whereInputType).description("Filter on props") }
+                .also { addConnectionArguments(it) }
                 .dataFetcher { env -> runBlocking { typedModelsDataFetcher(klerk, contextFactory, kClass, env) } }
         }
+        connectionTypes.add(
+            GraphQLObjectType.newObject().name("${typeName}Edge")
+                .field { it.name("node").type(GraphQLTypeReference(modelTypeName)) }
+                .field { it.name("cursor").type(GraphQLNonNull.nonNull(Scalars.GraphQLString)) }
+                .build()
+        )
+        connectionTypes.add(
+            GraphQLObjectType.newObject().name("${typeName}Connection")
+                .field {
+                    it.name("edges").type(GraphQLList.list(GraphQLNonNull.nonNull(GraphQLTypeReference("${typeName}Edge"))))
+                }
+                .field { it.name("pageInfo").type(GraphQLNonNull.nonNull(GraphQLTypeReference("PageInfo"))) }
+                .field { it.name("totalCount").type(Scalars.GraphQLInt).description("The size of the whole collection.") }
+                .build()
+        )
     }
 
     // Mutation type
@@ -306,6 +318,7 @@ private fun <C : KlerkContext, V> buildGraphQL(
     additionalTypes.add(pageInfoType)
     additionalTypes.add(klerkEdgeType)
     additionalTypes.add(klerkModelsResponseType)
+    additionalTypes.addAll(connectionTypes)
     additionalTypes.add(createCommandResponseType)
     additionalTypes.add(stringComparisonExpType)
     additionalTypes.addAll(scalarMap.values)
@@ -452,9 +465,72 @@ private fun serializeValue(value: Any?): Any? {
 // ---------------------------------------------------------------------------
 
 private fun <C : KlerkContext, V> collectionsDataFetcher(klerk: Klerk<C, V>): List<Map<String, Any>> {
-    return klerk.config.getCollections().map { (type, collection) ->
+    return klerk.spec.getCollections().map { (type, collection) ->
         mapOf("id" to collection.getFullId().toString(), "type" to type.simpleName!!)
     }
+}
+
+/** The Relay connection arguments, shared by every connection field. */
+private fun addConnectionArguments(field: GraphQLFieldDefinition.Builder): GraphQLFieldDefinition.Builder = field
+    .argument { it.name("first").type(Scalars.GraphQLInt).description("How many items to take, from `after` onwards.") }
+    .argument { it.name("after").type(Scalars.GraphQLString).description("Take the items following this cursor.") }
+    .argument {
+        it.name("last").type(Scalars.GraphQLInt)
+            .description("How many items to take, ending at `before`. Requires `before`.")
+    }
+    .argument { it.name("before").type(Scalars.GraphQLString).description("Take the items preceding this cursor.") }
+
+/**
+ * Turns Relay's `(first, after)` / `(last, before)` into [QueryOptions].
+ *
+ * `last` without `before` would mean "the end of the collection", which a position cursor cannot name; ask for it with
+ * `first` instead.
+ */
+private fun connectionOptions(env: DataFetchingEnvironment): QueryOptions {
+    val first = env.getArgument<Int?>("first")
+    val last = env.getArgument<Int?>("last")
+    val after = env.getArgument<String?>("after")
+    val before = env.getArgument<String?>("before")
+    require(first == null || last == null) { "Pass 'first' or 'last', not both" }
+    require(after == null || before == null) { "Pass 'after' or 'before', not both" }
+    require(first == null || first > 0) { "'first' must be positive" }
+    require(last == null || last > 0) { "'last' must be positive" }
+    if (last != null || before != null) {
+        requireNotNull(before) { "'last' needs 'before'; to read from the start of the collection use 'first'" }
+        return QueryOptions(
+            maxItems = last ?: DEFAULT_PAGE_SIZE,
+            cursor = QueryListCursor.fromString(before),
+            direction = PageDirection.BEFORE,
+            countTotal = true,
+        )
+    }
+    // Relay's `after` is exclusive: the page starts at the item following the one the cursor names.
+    return QueryOptions(
+        maxItems = first ?: DEFAULT_PAGE_SIZE,
+        cursor = after?.let { QueryListCursor.fromString(it) },
+        direction = if (after == null) PageDirection.FROM else PageDirection.AFTER,
+        countTotal = true,
+    )
+}
+
+private const val DEFAULT_PAGE_SIZE = 10
+
+/** Assembles a Relay connection: one edge per item, each carrying its own cursor. */
+private fun <T : Any> connection(result: QueryResponse<T>, nodes: List<Map<String, Any?>>): Map<String, Any?> {
+    val edges = nodes.mapIndexed { index, node ->
+        mapOf("node" to node, "cursor" to result.cursorAt(index).toString())
+    }
+    return mapOf(
+        "edges" to edges,
+        "pageInfo" to mapOf(
+            "hasPreviousPage" to result.hasPreviousPage,
+            "hasNextPage" to result.hasNextPage,
+            // Relay's startCursor/endCursor are the first and last *edge* of this page, not the first and last page.
+            "startCursor" to edges.firstOrNull()?.get("cursor"),
+            "endCursor" to edges.lastOrNull()?.get("cursor"),
+        ),
+        "totalCount" to result.totalCount,
+    )
 }
 
 private suspend fun <C : KlerkContext, V> modelsDataFetcher(
@@ -464,29 +540,20 @@ private suspend fun <C : KlerkContext, V> modelsDataFetcher(
 ): Map<String, Any?> {
     val context = contextFactory(env.graphQlContext)
     val collectionId = env.getArgument<String>("collectionId")!!
-    val first = env.getArgument<Int?>("first") ?: 10
     val whereJson = env.getArgument<String?>("where")
     val whereMap: Map<String, Any>? = if (whereJson != null) {
         @Suppress("UNCHECKED_CAST")
         jackson.readValue(whereJson, Map::class.java) as Map<String, Any>
     } else null
-    val collection = klerk.config.getCollection(CollectionId.from(collectionId))
-    val result = klerk.read(context) { query(collection, QueryOptions(maxItems = first)) }
-    val edges = result.items.filter { whereMap == null || matchesWhere(it.props, whereMap) }.map { item ->
-        val possibleEvents = klerk.read(context) { getPossibleEvents(item.id) }
-        val node = genericModelMap(item, possibleEvents, klerk)
-        val edgeCursor = QueryListCursor(after = item.createdAt).toString()
-        mapOf("node" to node, "cursor" to edgeCursor)
+    val collection = klerk.spec.getCollection(CollectionId.from(collectionId))
+    // The filter goes into the query, so `first: 10` really does return ten matching models when there are ten.
+    val result = klerk.read(context) {
+        query(collection, connectionOptions(env)) { whereMap == null || matchesWhere(it.props, whereMap) }
     }
-    return mapOf(
-        "edges" to edges,
-        "pageInfo" to mapOf(
-            "hasPreviousPage" to result.hasPreviousPage,
-            "hasNextPage" to result.hasNextPage,
-            "startCursor" to result.cursorFirst.toString(),
-            "endCursor" to result.cursorLast.toString()
-        )
-    )
+    val nodes = result.items.map { item ->
+        genericModelMap(item, klerk.read(context) { getPossibleEvents(item.id) }, klerk)
+    }
+    return connection(result, nodes)
 }
 
 private suspend fun <C : KlerkContext, V> modelDataFetcher(
@@ -508,9 +575,9 @@ private suspend fun <C : KlerkContext, V> voidCommandsDataFetcher(
 ): List<Map<String, Any?>> {
     val context = contextFactory(env.graphQlContext)
     val type = env.getArgument<String>("type")
-    val managed = klerk.config.managedModels.single { it.kClass.simpleName == type }
-    return klerk.config.getPossibleVoidEvents(managed.kClass, context)
-        .map { commandToMap(it, klerk.config.getParameters(it)) }
+    val managed = klerk.spec.managedModels.single { it.kClass.simpleName == type }
+    return klerk.spec.getPossibleVoidEvents(managed.kClass, context)
+        .map { commandToMap(it, klerk.spec.getParameters(it)) }
 }
 
 private suspend fun <C : KlerkContext, V> typedModelDataFetcher(
@@ -532,26 +599,28 @@ private suspend fun <C : KlerkContext, V> typedModelsDataFetcher(
     contextFactory: suspend (GraphQLContext) -> C,
     kClass: KClass<*>,
     env: DataFetchingEnvironment
-): List<Map<String, Any?>> {
+): Map<String, Any?> {
     val context = contextFactory(env.graphQlContext)
     val collectionId = env.getArgument<String>("collectionId")!!
-    val first = env.getArgument<Int?>("first") ?: 10
     @Suppress("UNCHECKED_CAST")
     val whereMap = env.getArgument<Map<String, Any>?>("where")
     @Suppress("UNCHECKED_CAST")
     val stateFilter = env.getArgument<Map<String, Any>?>("state")
     @Suppress("UNCHECKED_CAST")
     val createdAtFilter = env.getArgument<Map<String, Any>?>("createdAt")
-    val collection = klerk.config.getCollection(CollectionId.from(collectionId))
-    val result = klerk.read(context) { query(collection, QueryOptions(maxItems = first)) }
-    return result.items.filter { item ->
-        (whereMap == null || matchesWhere(item.props, whereMap)) &&
-        (stateFilter == null || matchesComparisonExp(item.state, stateFilter)) &&
-        (createdAtFilter == null || matchesComparisonExp(item.createdAt.toString(), createdAtFilter))
-    }.map { item ->
-        val possibleEvents = klerk.read(context) { getPossibleEvents(item.id) }
-        typedModelMap(item, possibleEvents, klerk)
+    val collection = klerk.spec.getCollection(CollectionId.from(collectionId))
+    // Every filter goes into the query, so a page is full whenever enough models match.
+    val result = klerk.read(context) {
+        query(collection, connectionOptions(env)) { item ->
+            (whereMap == null || matchesWhere(item.props, whereMap)) &&
+                (stateFilter == null || matchesComparisonExp(item.state, stateFilter)) &&
+                (createdAtFilter == null || matchesComparisonExp(item.createdAt.toString(), createdAtFilter))
+        }
     }
+    val nodes = result.items.map { item ->
+        typedModelMap(item, klerk.read(context) { getPossibleEvents(item.id) }, klerk)
+    }
+    return connection(result, nodes)
 }
 
 private fun <C : KlerkContext, V> typedModelMap(
@@ -559,7 +628,7 @@ private fun <C : KlerkContext, V> typedModelMap(
     eventReferences: Set<EventReference>,
     klerk: Klerk<C, V>
 ): Map<String, Any?> {
-    val commands = eventReferences.map { commandToMap(it, klerk.config.getParameters(it)) }
+    val commands = eventReferences.map { commandToMap(it, klerk.spec.getParameters(it)) }
     return mapOf(
         "id" to model.id.toString(),
         "type" to (model.props::class.simpleName ?: ""),
@@ -589,7 +658,7 @@ private fun <C : KlerkContext, V> genericModelMap(
             "value" to serializeValue(value)
         )
     }
-    val commands = eventReferences.map { commandToMap(it, klerk.config.getParameters(it)) }
+    val commands = eventReferences.map { commandToMap(it, klerk.spec.getParameters(it)) }
     return mapOf(
         "id" to model.id.toString(),
         "type" to model.props::class.simpleName,
@@ -753,10 +822,10 @@ private suspend fun <C : KlerkContext, V> createCommandDataFetcher(
     val paramsJson = env.getArgument<String>("paramsJson")!!
     val dryRun = env.getArgument<Boolean>("dryRun")!!
 
-    val eventObj = klerk.config.getEvent(EventReference.from(event))
-    val parameterInfo = klerk.config.getParameters(eventObj.id)
+    val eventObj = klerk.spec.getEvent(EventReference.from(event))
+    val parameterInfo = klerk.spec.getParameters(eventObj.id)
     val paramsObject = if (parameterInfo == null) null else
-        klerk.config.fromJson(paramsJson, parameterInfo.raw.javaObjectType)
+        klerk.spec.fromJson(paramsJson, parameterInfo.raw.javaObjectType)
 
     val result = klerk.handle(
         Command(
@@ -773,7 +842,7 @@ private suspend fun <C : KlerkContext, V> createCommandDataFetcher(
             "createdModels" to result.createdModels.map { it.toString() },
             "modifiedModels" to result.modelsWithUpdatedProps.map { it.toString() },
             "deletedModels" to result.deletedModels.map { it.toString() },
-            "generatedJobs" to result.jobs.map { it.id?.toUInt().toString() },
+            "generatedJobs" to result.jobs.map { it.value.toString() },
             "secondaryEvents" to result.secondaryEvents.map { it.id() }
         )
         is CommandResult.Failure -> {

@@ -24,7 +24,7 @@ fun main() {
     log.info { "Starting" }
     val bc = BookCollections()
     val views = MyViews(bc, AuthorCollections(bc.all), ModelViews())
-    val klerk = Klerk.create(createConfig(views))
+    val klerk = Klerk.create(createSpecification(views), testSettings())
     runBlocking {
         klerk.meta.start()
 

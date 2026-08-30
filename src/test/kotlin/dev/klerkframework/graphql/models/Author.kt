@@ -37,7 +37,7 @@ import dev.klerkframework.klerk.PropertyCollectionValidity.Invalid
 import dev.klerkframework.klerk.PropertyCollectionValidity.Valid
 import dev.klerkframework.klerk.Validatable
 import dev.klerkframework.klerk.VoidEventWithParameters
-import dev.klerkframework.klerk.job.RunnableJob
+import dev.klerkframework.klerk.job.DeclaredJob
 import dev.klerkframework.klerk.statemachine.StateMachine
 import dev.klerkframework.klerk.statemachine.stateMachine
 import kotlin.time.Duration.Companion.seconds
@@ -178,8 +178,8 @@ fun later(args: ArgForInstanceNonEvent<Author, Context, MyViews>): Instant {
 fun hasTalent(args: ArgForInstanceNonEvent<Author, Context, MyViews>): Boolean = true
 fun isAnImpostor(args: ArgForInstanceNonEvent<Author, Context, MyViews>): Boolean = false
 
-fun aJob(args: ArgForInstanceNonEvent<Author, Context, MyViews>): List<RunnableJob<Context, MyViews>> {
-    return listOf(MyJob())
+fun aJob(args: ArgForInstanceNonEvent<Author, Context, MyViews>): List<DeclaredJob<Context, MyViews>> {
+    return listOf(MyJob.declare(""))
 }
 
 
@@ -201,8 +201,8 @@ fun onEnterAmateurStateAction(args: ArgForInstanceNonEvent<Author, Context, MyVi
 }
 
 
-fun notifyBookStores(args: ArgForInstanceEvent<Author, ChangeNameParams, Context, MyViews>): List<RunnableJob<Context, MyViews>> {
-    return listOf(MyOtherJob(""))
+fun notifyBookStores(args: ArgForInstanceEvent<Author, ChangeNameParams, Context, MyViews>): List<DeclaredJob<Context, MyViews>> {
+    return listOf(MyOtherJob.declare(""))
 }
 
 data class CreateAuthorParams(

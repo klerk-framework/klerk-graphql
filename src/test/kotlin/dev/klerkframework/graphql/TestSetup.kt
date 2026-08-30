@@ -22,11 +22,10 @@ import dev.klerkframework.klerk.ArgForVoidEvent
 import dev.klerkframework.klerk.ArgModelContextReader
 import dev.klerkframework.klerk.ArgsForPropertyAuth
 import dev.klerkframework.klerk.AuthenticationIdentity
-import dev.klerkframework.klerk.Config
-import dev.klerkframework.klerk.ConfigBuilder
 import dev.klerkframework.klerk.EventVisibility.EXTERNAL
 import dev.klerkframework.klerk.Klerk
 import dev.klerkframework.klerk.KlerkContext
+import dev.klerkframework.klerk.KlerkSettings
 import dev.klerkframework.klerk.Model
 import dev.klerkframework.klerk.ModelID
 import dev.klerkframework.klerk.ModelIdentity
@@ -36,12 +35,13 @@ import dev.klerkframework.klerk.NegativeAuthorization.Pass
 import dev.klerkframework.klerk.PositiveAuthorization
 import dev.klerkframework.klerk.PropertyCollectionValidity
 import dev.klerkframework.klerk.PropertyCollectionValidity.*
+import dev.klerkframework.klerk.Specification
+import dev.klerkframework.klerk.SpecificationBuilder
 import dev.klerkframework.klerk.SystemIdentity
 import dev.klerkframework.klerk.Translation
 import dev.klerkframework.klerk.Unauthenticated
 import dev.klerkframework.klerk.VoidEventNoParameters
 import dev.klerkframework.klerk.collection.AllModelView
-import dev.klerkframework.klerk.collection.FilteredModelView
 import dev.klerkframework.klerk.collection.ModelView
 import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.collection.QueryListCursor
@@ -49,9 +49,11 @@ import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.datatypes.*
-import dev.klerkframework.klerk.job.JobMetadata
+import dev.klerkframework.klerk.job.JobAgent
+import dev.klerkframework.klerk.job.JobName
 import dev.klerkframework.klerk.job.JobResult
-import dev.klerkframework.klerk.job.RunnableJob
+import dev.klerkframework.klerk.job.JobStepArgs
+import dev.klerkframework.klerk.job.JobType
 import dev.klerkframework.klerk.misc.AlgorithmBuilder
 import dev.klerkframework.klerk.misc.Decision
 import dev.klerkframework.klerk.misc.FlowChartAlgorithm
@@ -69,13 +71,16 @@ import kotlin.time.Instant
 var onEnterAmateurStateActionCallback: (() -> Unit)? = null
 var onEnterImprovingStateActionCallback: (() -> Unit)? = null
 
-fun createConfig(views: MyViews, storage: Persistence = RamStorage()): Config<Context, MyViews> {
-    return ConfigBuilder<Context, MyViews>(views).build {
-        persistence(storage)
+fun createSpecification(views: MyViews): Specification<Context, MyViews> {
+    return SpecificationBuilder<Context, MyViews>(views).build {
         managedModels {
             model(Book::class, bookStateMachine(views.authors.all, views), views.books)
             model(Author::class, authorStateMachine(views), views.authors)
             model(Shop::class, shopStateMachine(), views.shops)
+        }
+        jobs {
+            register(MyJob)
+            register(MyOtherJob)
         }
         authorization {
             readModels {
@@ -114,6 +119,8 @@ fun createConfig(views: MyViews, storage: Persistence = RamStorage()): Config<Co
         systemContextProvider(::myContextProvider)
     }
 }
+
+fun testSettings(storage: Persistence = RamStorage()): KlerkSettings = KlerkSettings(persistence = storage)
 
 fun myContextProvider(systemIdentity: SystemIdentity): Context {
     return Context(systemIdentity)
@@ -208,17 +215,16 @@ class ShopName(value: String) : StringContainer(value) {
 
 
 
-class MyOtherJob(override val parameters: String) : RunnableJob<Context, MyViews>() {
+// A plain String cursor is used (rather than a custom data class) because this module has no kotlinx.serialization
+// compiler plugin applied, and String has a serializer built into kotlinx-serialization-core without it.
+object MyOtherJob : JobType.Local<String, Context, MyViews>() {
+    override val name: JobName = JobName("my-other-job")
+    override val agent: JobAgent = JobAgent.System
 
-    override fun getRunFunction() = MyOtherJob::run
-
-    companion object {
-        suspend fun run(metadata: JobMetadata, klerk: Klerk<Context, MyViews>) : JobResult {
-            println("Job started")
-            return JobResult.Success()
-        }
+    override suspend fun step(args: JobStepArgs.Local<String, Context, MyViews>): JobResult<String> {
+        println("Job started")
+        return JobResult.Success()
     }
-
 }
 
 
@@ -460,7 +466,7 @@ class Street(value: String) : StringContainer(value) {
     override val maxLines: Int = 1
 }
 
-fun addStandardTestConfiguration(auth: Boolean = true): ConfigBuilder<Context, MyViews>.() -> Unit = {
+fun addStandardTestConfiguration(auth: Boolean = true): SpecificationBuilder<Context, MyViews>.() -> Unit = {
     if (auth) {
         authorization {
             readModels {
@@ -516,7 +522,7 @@ object AlwaysFalseAlgorithm :
 
 data class Context(
     override val actor: ActorIdentity,
-    override val auditExtra: String? = null,
+    override val eventLogExtra: String? = null,
     override val time: Instant = Clock.System.now(),
     override val translation: Translation = dev.klerkframework.klerk.DefaultTranslation,
     val user: Model<User>? = null,
@@ -542,17 +548,13 @@ data class User(val name: FirstName)
 
 object AnEventWithoutParameters : VoidEventNoParameters<Author>(Author::class, EXTERNAL)
 
-class MyJob : RunnableJob<Context, MyViews>() {
-    override val parameters: String = ""
+object MyJob : JobType.Local<String, Context, MyViews>() {
+    override val name: JobName = JobName("my-job")
+    override val agent: JobAgent = JobAgent.System
 
-    companion object {
-        suspend fun run(metadata: JobMetadata, klerk: Klerk<Context, MyViews>) : JobResult {
-            return JobResult.Success()
-        }
+    override suspend fun step(args: JobStepArgs.Local<String, Context, MyViews>): JobResult<String> {
+        return JobResult.Success()
     }
-
-    override fun getRunFunction() = MyJob::run
-
 }
 
 
@@ -566,18 +568,16 @@ class AuthorsWithAtLeastTwoBooks<V>(
     private val books: AllModelView<Book, Context>,
 ) : ModelView<Author, Context>(authors) {
 
-    override fun filter(filter: ((Model<Author>) -> Boolean)?): ModelView<Author, Context> {
-        return if (filter == null) this else FilteredModelView(this, filter)
+    override fun <V> memberIds(reader: Reader<Context, V>): Sequence<ModelID<Author>> {
+        val authorsWithTwoBooks = books.withReader(reader)
+            .groupingBy { it.props.author }
+            .eachCount()
+            .filterValues { it >= 2 }
+            .keys
+        return authors.memberIds(reader).filter { authorsWithTwoBooks.contains(it) }
     }
 
-    override fun <V> withReader(reader: Reader<Context, V>, cursor: QueryListCursor?): Sequence<Model<Author>> {
-        return authors.withReader(reader, cursor).filter { author ->
-            books.withReader(reader, null).filter { it.props.author == author.id }.take(2).count() == 2
-        }
-    }
-
-    override fun <V> contains(value: ModelID<*>, reader: Reader<Context, V>): Boolean {
-        return withReader(reader, null).any { it.id == value }
-    }
+    override fun <V> contains(value: ModelID<*>, reader: Reader<Context, V>): Boolean =
+        memberIds(reader).any { it.value == value.value }
 
 }
