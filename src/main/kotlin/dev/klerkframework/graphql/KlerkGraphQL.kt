@@ -26,9 +26,10 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.util.*
 import kotlinx.coroutines.runBlocking
+import dev.klerkframework.klerk.misc.ObjectSchema
+import dev.klerkframework.klerk.misc.PropertyType
+import dev.klerkframework.klerk.misc.SchemaField
 import kotlin.reflect.KClass
-import kotlin.reflect.full.isSuperclassOf
-import kotlin.reflect.full.memberProperties
 
 private val jackson = ObjectMapper().registerKotlinModule()
 private val graphQLKey = AttributeKey<GraphQL>("KlerkGraphQL")
@@ -337,18 +338,11 @@ private fun <C : KlerkContext, V> buildGraphQL(
 private fun buildPropsType(kClass: KClass<*>, scalarMap: MutableMap<String, GraphQLScalarType>, enumTypeMap: MutableMap<String, GraphQLEnumType>): GraphQLObjectType {
     val typeName = "${kClass.simpleName!!}Props"
     val builder = GraphQLObjectType.newObject().name(typeName)
-    for (prop in kClass.memberProperties) {
-        val fieldType = resolveGraphQLType(prop.returnType.classifier as? KClass<*>, scalarMap, enumTypeMap) ?: continue
+    for (field in ObjectSchema.of(kClass).fields) {
+        val fieldType = resolveGraphQLType(field, scalarMap, enumTypeMap)
         builder.field { f ->
-            f.name(prop.name).type(fieldType).dataFetcher { env ->
-                val obj = env.getSource<Any>()
-                try {
-                    @Suppress("UNCHECKED_CAST")
-                    val rawValue = (prop as kotlin.reflect.KProperty1<Any, Any?>).get(obj!!)
-                    serializeValue(rawValue)
-                } catch (e: Exception) {
-                    null
-                }
+            f.name(field.name).type(fieldType).dataFetcher { env ->
+                env.getSource<Any>()?.let { serializeValue(field.get(it)) }
             }
         }
     }
@@ -374,28 +368,15 @@ private fun buildModelObjectType(typeName: String, propsType: GraphQLObjectType)
 // Type resolution helpers
 // ---------------------------------------------------------------------------
 
-private fun resolveGraphQLType(kClass: KClass<*>?, scalarMap: MutableMap<String, GraphQLScalarType>, enumTypeMap: MutableMap<String, GraphQLEnumType> = mutableMapOf()): GraphQLOutputType? {
-    if (kClass == null) return Scalars.GraphQLString
-    return when {
-        kClass == String::class -> Scalars.GraphQLString
-        kClass == Int::class || kClass == java.lang.Integer::class -> Scalars.GraphQLInt
-        kClass == Long::class || kClass == java.lang.Long::class -> Scalars.GraphQLString
-        kClass == Float::class || kClass == Double::class -> Scalars.GraphQLFloat
-        kClass == Boolean::class -> Scalars.GraphQLBoolean
-        kClass == kotlin.time.Instant::class -> getOrCreateScalar("Instant", Scalars.GraphQLString, scalarMap) { (it as kotlin.time.Instant).toString() }
-        kClass == kotlin.time.Duration::class -> getOrCreateScalar("Duration", Scalars.GraphQLString, scalarMap) { it.toString() }
-        kClass == ULong::class -> getOrCreateScalar("ULong", Scalars.GraphQLString, scalarMap) { it.toString() }
-        kClass == UInt::class -> getOrCreateScalar("UInt", Scalars.GraphQLString, scalarMap) { it.toString() }
-        StringContainer::class.isSuperclassOf(kClass) -> Scalars.GraphQLString
-        IntContainer::class.isSuperclassOf(kClass) -> Scalars.GraphQLInt
-        LongContainer::class.isSuperclassOf(kClass) -> Scalars.GraphQLString
-        FloatContainer::class.isSuperclassOf(kClass) -> Scalars.GraphQLFloat
-        BooleanContainer::class.isSuperclassOf(kClass) -> Scalars.GraphQLBoolean
-        InstantContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar("Instant", Scalars.GraphQLString, scalarMap) { it.toString() }
-        DurationContainer::class.isSuperclassOf(kClass) -> getOrCreateScalar("Duration", Scalars.GraphQLString, scalarMap) { it.toString() }
-        EnumContainer::class.isSuperclassOf(kClass) -> getOrCreateEnumType(kClass, enumTypeMap)
-        kClass.java.isEnum -> getOrCreateEnumType(kClass, enumTypeMap)
-        ModelID::class.isSuperclassOf(kClass) -> Scalars.GraphQLString
+private fun resolveGraphQLType(field: SchemaField, scalarMap: MutableMap<String, GraphQLScalarType>, enumTypeMap: MutableMap<String, GraphQLEnumType>): GraphQLOutputType {
+    if (field.isCollection) return Scalars.GraphQLString
+    return when (field.type) {
+        PropertyType.Int -> Scalars.GraphQLInt
+        PropertyType.Float -> Scalars.GraphQLFloat
+        PropertyType.Boolean -> Scalars.GraphQLBoolean
+        PropertyType.Instant -> getOrCreateScalar("Instant", Scalars.GraphQLString, scalarMap) { it.toString() }
+        PropertyType.Duration -> getOrCreateScalar("Duration", Scalars.GraphQLString, scalarMap) { it.toString() }
+        PropertyType.Enum -> getOrCreateEnumType(field, enumTypeMap)
         else -> Scalars.GraphQLString
     }
 }
@@ -415,22 +396,13 @@ private fun getOrCreateScalar(
     }
 }
 
-private fun getOrCreateEnumType(kClass: KClass<*>, enumTypeMap: MutableMap<String, GraphQLEnumType>): GraphQLEnumType {
-    // For EnumContainer subclasses, find the enum type via the supertype type argument
-    val enumClass: Class<*> = if (EnumContainer::class.isSuperclassOf(kClass)) {
-        val supertype = kClass.supertypes.firstOrNull { it.classifier == EnumContainer::class }
-        val enumKClass = supertype?.arguments?.firstOrNull()?.type?.classifier as? KClass<*>
-        enumKClass?.java ?: kClass.java
-    } else {
-        kClass.java
-    }
-    val enumName = enumClass.simpleName ?: kClass.simpleName!!
+private fun getOrCreateEnumType(field: SchemaField, enumTypeMap: MutableMap<String, GraphQLEnumType>): GraphQLEnumType {
+    // A constant with a body is an instance of a subclass of the enum class.
+    val enumClass = field.enumConstants.firstOrNull()?.javaClass?.let { if (it.isEnum) it else it.superclass }
+    val enumName = enumClass?.simpleName ?: field.valueClass.simpleName!!
     return enumTypeMap.getOrPut(enumName) {
         val builder = GraphQLEnumType.newEnum().name(enumName)
-        @Suppress("UNCHECKED_CAST")
-        (enumClass.enumConstants ?: emptyArray()).forEach { constant ->
-            builder.value((constant as Enum<*>).name)
-        }
+        field.enumConstants.forEach { builder.value(it.name) }
         builder.build()
     }
 }
@@ -648,15 +620,11 @@ private fun <C : KlerkContext, V> genericModelMap(
     eventReferences: Set<EventReference>,
     klerk: Klerk<C, V>
 ): Map<String, Any?> {
-    val props = model.props::class.memberProperties.map { prop ->
-        val value = try {
-            @Suppress("UNCHECKED_CAST")
-            (prop as kotlin.reflect.KProperty1<Any, *>).get(model.props)
-        } catch (e: Exception) { null }
+    val props = ObjectSchema.of(model.props::class).fields.map { field ->
         mapOf(
-            "name" to prop.name,
-            "type" to (prop.returnType.classifier as? KClass<*>)?.simpleName,
-            "value" to serializeValue(value)
+            "name" to field.name,
+            "type" to field.valueClass.simpleName,
+            "value" to serializeValue(field.get(model.props))
         )
     }
     val commands = eventReferences.map { commandToMap(it, klerk.spec.getParameters(it)) }
@@ -684,7 +652,7 @@ internal fun buildWhereInputType(kClass: KClass<*>): GraphQLInputObjectType {
     val whereTypeName = "${typeName}WhereInput"
     val builder = GraphQLInputObjectType.newInputObject().name(whereTypeName)
 
-    for (prop in kClass.memberProperties) {
+    for (prop in ObjectSchema.of(kClass).fields) {
         val compExpName = "${typeName}${prop.name.replaceFirstChar { it.uppercase() }}ComparisonExp"
         val compExp = GraphQLInputObjectType.newInputObject().name(compExpName)
             .field { it.name("_eq").type(Scalars.GraphQLString) }
@@ -733,13 +701,8 @@ internal fun matchesWhere(props: Any, where: Map<String, Any?>): Boolean {
             else -> {
                 // key is a field name
                 val compExp = value as? Map<String, Any?> ?: continue
-                val prop = props::class.memberProperties.find { it.name == key } ?: return false
-                val rawValue = try {
-                    (prop as kotlin.reflect.KProperty1<Any, *>).get(props)
-                } catch (e: Exception) {
-                    return false
-                }
-                if (!matchesComparisonExp(rawValue, compExp)) return false
+                val field = ObjectSchema.of(props::class).field(key) ?: return false
+                if (!matchesComparisonExp(field.get(props), compExp)) return false
             }
         }
     }
@@ -798,13 +761,13 @@ private fun likeToRegex(pattern: String, ignoreCase: Boolean = false): Regex {
 
 private fun commandToMap(
     ref: EventReference,
-    parameters: dev.klerkframework.klerk.misc.EventParameters<*>?
+    parameters: ObjectSchema<*>?
 ): Map<String, Any?> {
-    val params = parameters?.all?.map { p ->
+    val params = parameters?.fields?.map { p ->
         mapOf(
             "name" to p.name,
             "type" to (p.type?.name ?: "[?]"),
-            "ofType" to p.modelIDType,
+            "ofType" to p.referencedModel?.qualifiedName,
             "nullable" to p.isNullable,
             "required" to p.isRequired
         )
