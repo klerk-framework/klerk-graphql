@@ -45,6 +45,7 @@ import dev.klerkframework.klerk.collection.AllModelView
 import dev.klerkframework.klerk.collection.ModelView
 import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.collection.QueryListCursor
+import dev.klerkframework.klerk.collection.asSequence
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
@@ -287,7 +288,7 @@ fun onlyAllowAuthorNameAstridIfThereIsNoRowling(args: ArgForVoidEvent<Author, Cr
         if (args.command.params.firstName.value != "Astrid") {
             return Valid
         }
-        val rowling = firstOrNull(views.authors.all) { it.props.firstName.value == "Rowling" }
+        val rowling = views.authors.all.asSequence().firstOrNull { it.props.firstName.value == "Rowling" }
         return if (rowling == null) Valid else Invalid()
     }
 }

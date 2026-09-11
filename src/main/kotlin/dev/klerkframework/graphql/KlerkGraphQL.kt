@@ -7,6 +7,7 @@ import dev.klerkframework.klerk.collection.PageDirection
 import dev.klerkframework.klerk.collection.QueryListCursor
 import dev.klerkframework.klerk.collection.QueryOptions
 import dev.klerkframework.klerk.collection.QueryResponse
+import dev.klerkframework.klerk.collection.query
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
@@ -548,7 +549,7 @@ private suspend fun <C : KlerkContext, V> modelsDataFetcher(
     val collection = klerk.spec.getCollection(CollectionId.from(collectionId))
     // The filter goes into the query, so `first: 10` really does return ten matching models when there are ten.
     val result = klerk.read(context) {
-        query(collection, connectionOptions(env)) { whereMap == null || matchesWhere(it.props, whereMap) }
+        collection.query(connectionOptions(env)) { whereMap == null || matchesWhere(it.props, whereMap) }
     }
     val nodes = result.items.map { item ->
         genericModelMap(item, klerk.read(context) { getPossibleEvents(item.id) }, klerk)
@@ -611,7 +612,7 @@ private suspend fun <C : KlerkContext, V> typedModelsDataFetcher(
     val collection = klerk.spec.getCollection(CollectionId.from(collectionId))
     // Every filter goes into the query, so a page is full whenever enough models match.
     val result = klerk.read(context) {
-        query(collection, connectionOptions(env)) { item ->
+        collection.query(connectionOptions(env)) { item ->
             (whereMap == null || matchesWhere(item.props, whereMap)) &&
                 (stateFilter == null || matchesComparisonExp(item.state, stateFilter)) &&
                 (createdAtFilter == null || matchesComparisonExp(item.createdAt.toString(), createdAtFilter))
@@ -824,8 +825,7 @@ private suspend fun <C : KlerkContext, V> createCommandDataFetcher(
 
     val eventObj = klerk.spec.getEvent(EventReference.from(event))
     val parameterInfo = klerk.spec.getParameters(eventObj.id)
-    val paramsObject = if (parameterInfo == null) null else
-        klerk.spec.fromJson(paramsJson, parameterInfo.raw.javaObjectType)
+    val paramsObject = parameterInfo?.fromJson(paramsJson)
 
     val result = klerk.handle(
         Command(
