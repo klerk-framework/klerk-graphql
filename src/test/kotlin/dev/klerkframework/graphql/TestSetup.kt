@@ -56,9 +56,10 @@ import dev.klerkframework.klerk.job.JobResult
 import dev.klerkframework.klerk.job.JobStepArgs
 import dev.klerkframework.klerk.job.JobType
 import dev.klerkframework.klerk.misc.AlgorithmBuilder
+import dev.klerkframework.klerk.ExperimentalKlerkApi
 import dev.klerkframework.klerk.misc.Decision
 import dev.klerkframework.klerk.misc.FlowChartAlgorithm
-import dev.klerkframework.klerk.read.Reader
+import dev.klerkframework.klerk.read.ModelReader
 import dev.klerkframework.klerk.storage.Persistence
 import dev.klerkframework.klerk.storage.RamStorage
 import dev.klerkframework.klerk.validation.PropertyValidation
@@ -319,9 +320,8 @@ suspend fun createAuthorJKRowling(klerk: Klerk<Context, MyViews>): ModelID<Autho
             ),
         ),
         Context.system(),
-        ProcessingOptions(CommandToken.simple()),
     )
-    return requireNotNull(result.orThrow().primaryModel)
+    return requireNotNull(result.getOrThrow().primaryModel)
 }
 
 suspend fun createAuthorAstrid(klerk: Klerk<Context, MyViews>): ModelID<Author> {
@@ -332,10 +332,9 @@ suspend fun createAuthorAstrid(klerk: Klerk<Context, MyViews>): ModelID<Author> 
             params = createAstridParameters,
         ),
         Context.system(),
-        ProcessingOptions(CommandToken.simple()),
     )
     @Suppress("UNCHECKED_CAST")
-    return result.orThrow().createdModels.single() as ModelID<Author>
+    return result.getOrThrow().createdModels.single() as ModelID<Author>
 }
 
 val createAstridParameters = CreateAuthorParams(
@@ -360,9 +359,8 @@ suspend fun createBookHarryPotter1(klerk: Klerk<Context, MyViews>, author: Model
             ),
         ),
         Context.system(),
-        ProcessingOptions(CommandToken.simple())
     )
-    return requireNotNull(result.orThrow().primaryModel)
+    return requireNotNull(result.getOrThrow().primaryModel)
 }
 
 suspend fun createBookHarryPotter2(
@@ -385,9 +383,8 @@ suspend fun createBookHarryPotter2(
             ),
         ),
         Context.system(),
-        ProcessingOptions(CommandToken.simple()),
     )
-    return requireNotNull(result.orThrow().primaryModel)
+    return requireNotNull(result.getOrThrow().primaryModel)
 }
 
 class PhoneNumber(value: String) : StringContainer(value) {
@@ -495,6 +492,7 @@ fun addStandardTestConfiguration(auth: Boolean = true): SpecificationBuilder<Con
     }
 }
 
+@OptIn(ExperimentalKlerkApi::class)
 sealed class AlwaysFalseDecisions(
     override val name: String,
     override val function: (ArgForInstanceEvent<Author, CreateAuthorParams, Context, MyViews>) -> Boolean
@@ -508,6 +506,7 @@ fun alwaysFalse(args: ArgForInstanceEvent<Author, CreateAuthorParams, Context, M
 }
 
 
+@OptIn(ExperimentalKlerkApi::class)
 object AlwaysFalseAlgorithm :
     FlowChartAlgorithm<ArgForInstanceEvent<Author, CreateAuthorParams, Context, MyViews>, Boolean>("Always false") {
 
@@ -569,7 +568,7 @@ class AuthorsWithAtLeastTwoBooks<V>(
     private val books: AllModelView<Book, Context>,
 ) : ModelView<Author, Context>(authors) {
 
-    override fun <V> memberIds(reader: Reader<Context, V>): Sequence<ModelID<Author>> {
+    override fun <V> memberIds(reader: ModelReader<Context, V>): Sequence<ModelID<Author>> {
         val authorsWithTwoBooks = books.withReader(reader)
             .groupingBy { it.props.author }
             .eachCount()
@@ -578,7 +577,7 @@ class AuthorsWithAtLeastTwoBooks<V>(
         return authors.memberIds(reader).filter { authorsWithTwoBooks.contains(it) }
     }
 
-    override fun <V> contains(value: ModelID<*>, reader: Reader<Context, V>): Boolean =
+    override fun <V> contains(value: ModelID<*>, reader: ModelReader<Context, V>): Boolean =
         memberIds(reader).any { it.value == value.value }
 
 }

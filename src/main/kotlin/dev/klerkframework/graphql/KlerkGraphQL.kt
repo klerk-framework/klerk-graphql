@@ -201,7 +201,6 @@ private fun <C : KlerkContext, V> buildGraphQL(
         .field { it.name("modifiedModels").type(GraphQLList.list(GraphQLNonNull.nonNull(Scalars.GraphQLString))) }
         .field { it.name("deletedModels").type(GraphQLList.list(GraphQLNonNull.nonNull(Scalars.GraphQLString))) }
         .field { it.name("generatedJobs").type(GraphQLList.list(GraphQLNonNull.nonNull(Scalars.GraphQLString))) }
-        .field { it.name("secondaryEvents").type(GraphQLList.list(GraphQLNonNull.nonNull(Scalars.GraphQLString))) }
         .build()
 
     val stringComparisonExpType = GraphQLInputObjectType.newInputObject().name("StringComparisonExp")
@@ -803,10 +802,9 @@ private suspend fun <C : KlerkContext, V> createCommandDataFetcher(
     return when (result) {
         is CommandResult.Success -> mapOf(
             "createdModels" to result.createdModels.map { it.toString() },
-            "modifiedModels" to result.modelsWithUpdatedProps.map { it.toString() },
+            "modifiedModels" to result.updatedModels.map { it.toString() },
             "deletedModels" to result.deletedModels.map { it.toString() },
-            "generatedJobs" to result.jobs.map { it.value.toString() },
-            "secondaryEvents" to result.secondaryEvents.map { it.id() }
+            "generatedJobs" to result.jobs.map { it.value.toString() }
         )
         is CommandResult.Failure -> {
             val message = requireNotNull(result.problems.first()).endUserTranslatedMessage

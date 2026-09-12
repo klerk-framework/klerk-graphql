@@ -46,8 +46,7 @@ class ConnectionTest {
                 ),
             ),
             Context.system(),
-            ProcessingOptions(CommandToken.simple()),
-        ).orThrow().primaryModel!!
+        ).getOrThrow().primaryModel!!
 
     private suspend fun ApplicationTestBuilder.graphql(query: String): Map<*, *> {
         val response = client.post("/graphql") {

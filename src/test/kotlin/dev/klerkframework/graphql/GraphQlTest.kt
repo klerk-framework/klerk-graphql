@@ -80,6 +80,5 @@ private suspend fun createShop(klerk: Klerk<Context, MyViews>) {
         )
     ),
         Context.system(),
-        ProcessingOptions(CommandToken.simple())
     )
 }
