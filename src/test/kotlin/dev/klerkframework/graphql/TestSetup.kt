@@ -22,7 +22,7 @@ import dev.klerkframework.klerk.ArgForVoidEvent
 import dev.klerkframework.klerk.ArgModelContextReader
 import dev.klerkframework.klerk.ArgsForPropertyAuth
 import dev.klerkframework.klerk.AuthenticationIdentity
-import dev.klerkframework.klerk.EventVisibility.EXTERNAL
+import dev.klerkframework.klerk.EventVisibility.External
 import dev.klerkframework.klerk.Klerk
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.KlerkSettings
@@ -546,7 +546,7 @@ data class Context(
 
 data class User(val name: FirstName)
 
-object AnEventWithoutParameters : VoidEventNoParameters<Author>(Author::class, EXTERNAL)
+object AnEventWithoutParameters : VoidEventNoParameters<Author>(Author::class, External)
 
 object MyJob : JobType.Local<String, Context, MyViews>() {
     override val name: JobName = JobName("my-job")

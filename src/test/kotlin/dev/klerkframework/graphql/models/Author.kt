@@ -28,7 +28,7 @@ import dev.klerkframework.graphql.updateAuthor
 import dev.klerkframework.klerk.ArgForInstanceEvent
 import dev.klerkframework.klerk.ArgForInstanceNonEvent
 import dev.klerkframework.klerk.ArgForVoidEvent
-import dev.klerkframework.klerk.EventVisibility.EXTERNAL
+import dev.klerkframework.klerk.EventVisibility.External
 import dev.klerkframework.klerk.InstanceEventNoParameters
 import dev.klerkframework.klerk.InstanceEventWithParameters
 import dev.klerkframework.klerk.ModelID
@@ -227,19 +227,19 @@ data class ChangeNameParams(val updatedFirstName: FirstName, val updatedLastName
 
 
 object CreateAuthor :
-    VoidEventWithParameters<Author, CreateAuthorParams>(Author::class, EXTERNAL, CreateAuthorParams::class)
+    VoidEventWithParameters<Author, CreateAuthorParams>(Author::class, External, CreateAuthorParams::class)
 
-object UpdateAuthor : InstanceEventWithParameters<Author, Author>(Author::class, EXTERNAL, Author::class) {
+object UpdateAuthor : InstanceEventWithParameters<Author, Author>(Author::class, External, Author::class) {
 
 }
 
-object DeleteAuthor : InstanceEventNoParameters<Author>(Author::class, EXTERNAL)
+object DeleteAuthor : InstanceEventNoParameters<Author>(Author::class, External)
 
-object DeleteAuthorAndBooks : InstanceEventNoParameters<Author>(Author::class, EXTERNAL)
+object DeleteAuthorAndBooks : InstanceEventNoParameters<Author>(Author::class, External)
 
-object ImproveAuthor : InstanceEventNoParameters<Author>(Author::class, EXTERNAL)
+object ImproveAuthor : InstanceEventNoParameters<Author>(Author::class, External)
 
-object ChangeName : InstanceEventWithParameters<Author, ChangeNameParams>(Author::class, EXTERNAL, ChangeNameParams::class)
+object ChangeName : InstanceEventWithParameters<Author, ChangeNameParams>(Author::class, External, ChangeNameParams::class)
 
 fun changeNameOfAuthor(args: ArgForInstanceEvent<Author, ChangeNameParams, Context, MyViews>): Author {
     return args.model.props.copy(
@@ -248,7 +248,7 @@ fun changeNameOfAuthor(args: ArgForInstanceEvent<Author, ChangeNameParams, Conte
     )
 }
 
-object CreateAuthorTheAdvancedWay : VoidEventWithParameters<Author, AdvancedParams>(Author::class, EXTERNAL, AdvancedParams::class)
+object CreateAuthorTheAdvancedWay : VoidEventWithParameters<Author, AdvancedParams>(Author::class, External, AdvancedParams::class)
 
 fun newAuthorFromAdvancedParams(args: ArgForVoidEvent<Author, AdvancedParams, Context, MyViews>): Author {
     println("Doing something with ${args.command.params.titles.joinToString { it.title.value }} and ${args.command.params.averageScore.value}")

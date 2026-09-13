@@ -11,7 +11,7 @@ import dev.klerkframework.graphql.ReadingTime
 import dev.klerkframework.graphql.ReleasePartyPosition
 import dev.klerkframework.klerk.ArgForInstanceEvent
 import dev.klerkframework.klerk.ArgForVoidEvent
-import dev.klerkframework.klerk.EventVisibility.EXTERNAL
+import dev.klerkframework.klerk.EventVisibility.External
 import dev.klerkframework.klerk.InstanceEventNoParameters
 import dev.klerkframework.klerk.ModelID
 import dev.klerkframework.klerk.VoidEventWithParameters
@@ -89,11 +89,11 @@ fun bookStateMachine(allAuthors: ModelView<Author, Context>, collections: MyView
 
     }
 
-object CreateBook : VoidEventWithParameters<Book, CreateBookParams>(Book::class, EXTERNAL, CreateBookParams::class)
+object CreateBook : VoidEventWithParameters<Book, CreateBookParams>(Book::class, External, CreateBookParams::class)
 
-object PublishBook : InstanceEventNoParameters<Book>(Book::class, EXTERNAL)
+object PublishBook : InstanceEventNoParameters<Book>(Book::class, External)
 
-object DeleteBook : InstanceEventNoParameters<Book>(Book::class, EXTERNAL)
+object DeleteBook : InstanceEventNoParameters<Book>(Book::class, External)
 
 data class CreateBookParams(
     val title: BookTitle,

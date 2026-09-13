@@ -3,7 +3,7 @@ package dev.klerkframework.graphql.models
 import dev.klerkframework.graphql.Context
 import dev.klerkframework.graphql.MyViews
 import dev.klerkframework.klerk.ArgForVoidEvent
-import dev.klerkframework.klerk.EventVisibility.EXTERNAL
+import dev.klerkframework.klerk.EventVisibility.External
 import dev.klerkframework.klerk.InstanceEventNoParameters
 import dev.klerkframework.klerk.ModelID
 import dev.klerkframework.klerk.VoidEventWithParameters
@@ -42,11 +42,11 @@ fun shopStateMachine(): StateMachine<Shop, ShopStates, Context, MyViews> =
         }
     }
 
-object CreateShop : VoidEventWithParameters<Shop, CreateShopParams>(Shop::class, EXTERNAL, CreateShopParams::class)
+object CreateShop : VoidEventWithParameters<Shop, CreateShopParams>(Shop::class, External, CreateShopParams::class)
 
-object PublishShop : InstanceEventNoParameters<Shop>(Shop::class, EXTERNAL)
+object PublishShop : InstanceEventNoParameters<Shop>(Shop::class, External)
 
-object DeleteShop : InstanceEventNoParameters<Shop>(Shop::class, EXTERNAL)
+object DeleteShop : InstanceEventNoParameters<Shop>(Shop::class, External)
 
 data class CreateShopParams(
     val faxNumber: FaxNumber?,
