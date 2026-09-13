@@ -46,7 +46,7 @@ public fun GraphQLContext.applicationCall(): ApplicationCall? = get(ApplicationC
 /**
  * Installs the KlerkGraphQL plugin into a Ktor application.
  *
- * The GraphQL schema is generated dynamically from [Klerk.spec.managedModels], so users do not
+ * The GraphQL schema is generated dynamically from [Klerk.specification.managedModels], so users do not
  * need to create per-model query classes. For each managed model type `Foo`, the schema will
  * automatically expose typed queries `foo(id)` and `foos(collectionId)` returning `FooKlerkModel`
  * objects with a strongly-typed `props: FooProps` field.
@@ -133,7 +133,7 @@ private fun <C : KlerkContext, V> buildGraphQL(
 
     // Build a typed ObjectType and WhereInput for each managed model
     val whereInputMap = mutableMapOf<String, GraphQLInputObjectType>()
-    for (managed in klerk.spec.managedModels) {
+    for (managed in klerk.specification.managedModels) {
         val propsType = buildPropsType(managed.kClass, scalarMap, enumTypeMap)
         val modelType = buildModelObjectType(managed.kClass.simpleName!!, propsType)
         typeMap[managed.kClass.simpleName!!] = modelType
@@ -248,7 +248,7 @@ private fun <C : KlerkContext, V> buildGraphQL(
 
     // Per-model typed queries: e.g. author(id) and authors(collectionId)
     val connectionTypes = mutableSetOf<GraphQLType>()
-    for (managed in klerk.spec.managedModels) {
+    for (managed in klerk.specification.managedModels) {
         val typeName = managed.kClass.simpleName!!
         val singularName = typeName.replaceFirstChar { it.lowercase() }
         val pluralName = "${singularName}s"
@@ -437,7 +437,7 @@ private fun serializeValue(value: Any?): Any? {
 // ---------------------------------------------------------------------------
 
 private fun <C : KlerkContext, V> collectionsDataFetcher(klerk: Klerk<C, V>): List<Map<String, Any>> {
-    return klerk.spec.getCollections().map { (type, collection) ->
+    return klerk.specification.getCollections().map { (type, collection) ->
         mapOf("id" to collection.getFullId().toString(), "type" to type.simpleName!!)
     }
 }
@@ -517,7 +517,7 @@ private suspend fun <C : KlerkContext, V> modelsDataFetcher(
         @Suppress("UNCHECKED_CAST")
         jackson.readValue(whereJson, Map::class.java) as Map<String, Any>
     } else null
-    val collection = klerk.spec.getCollection(CollectionId.from(collectionId))
+    val collection = klerk.specification.getCollection(CollectionId.from(collectionId))
     // The filter goes into the query, so `first: 10` really does return ten matching models when there are ten.
     val result = klerk.read(context) {
         collection.query(connectionOptions(env)) { whereMap == null || matchesWhere(it.props, whereMap) }
@@ -547,9 +547,9 @@ private suspend fun <C : KlerkContext, V> voidCommandsDataFetcher(
 ): List<Map<String, Any?>> {
     val context = contextFactory(env.graphQlContext)
     val type = env.getArgument<String>("type")
-    val managed = klerk.spec.managedModels.single { it.kClass.simpleName == type }
-    return klerk.spec.getPossibleVoidEvents(managed.kClass, context)
-        .map { commandToMap(it, klerk.spec.getParameters(it)) }
+    val managed = klerk.specification.managedModels.single { it.kClass.simpleName == type }
+    return klerk.specification.getPossibleVoidEvents(managed.kClass, context)
+        .map { commandToMap(it, klerk.specification.getParameters(it)) }
 }
 
 private suspend fun <C : KlerkContext, V> typedModelDataFetcher(
@@ -580,7 +580,7 @@ private suspend fun <C : KlerkContext, V> typedModelsDataFetcher(
     val stateFilter = env.getArgument<Map<String, Any>?>("state")
     @Suppress("UNCHECKED_CAST")
     val createdAtFilter = env.getArgument<Map<String, Any>?>("createdAt")
-    val collection = klerk.spec.getCollection(CollectionId.from(collectionId))
+    val collection = klerk.specification.getCollection(CollectionId.from(collectionId))
     // Every filter goes into the query, so a page is full whenever enough models match.
     val result = klerk.read(context) {
         collection.query(connectionOptions(env)) { item ->
@@ -600,7 +600,7 @@ private fun <C : KlerkContext, V> typedModelMap(
     eventReferences: Set<EventReference>,
     klerk: Klerk<C, V>
 ): Map<String, Any?> {
-    val commands = eventReferences.map { commandToMap(it, klerk.spec.getParameters(it)) }
+    val commands = eventReferences.map { commandToMap(it, klerk.specification.getParameters(it)) }
     return mapOf(
         "id" to model.id.toString(),
         "type" to (model.props::class.simpleName ?: ""),
@@ -626,7 +626,7 @@ private fun <C : KlerkContext, V> genericModelMap(
             "value" to serializeValue(field.get(model.props))
         )
     }
-    val commands = eventReferences.map { commandToMap(it, klerk.spec.getParameters(it)) }
+    val commands = eventReferences.map { commandToMap(it, klerk.specification.getParameters(it)) }
     return mapOf(
         "id" to model.id.toString(),
         "type" to model.props::class.simpleName,
@@ -785,8 +785,8 @@ private suspend fun <C : KlerkContext, V> createCommandDataFetcher(
     val paramsJson = env.getArgument<String>("paramsJson")!!
     val dryRun = env.getArgument<Boolean>("dryRun")!!
 
-    val eventObj = klerk.spec.getEvent(EventReference.from(event))
-    val parameterInfo = klerk.spec.getParameters(eventObj.id)
+    val eventObj = klerk.specification.getEvent(EventReference.from(event))
+    val parameterInfo = klerk.specification.getParameters(eventObj.id)
     val paramsObject = parameterInfo?.fromJson(paramsJson)
 
     val result = klerk.handle(

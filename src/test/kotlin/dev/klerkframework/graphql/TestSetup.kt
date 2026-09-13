@@ -41,7 +41,6 @@ import dev.klerkframework.klerk.SystemIdentity
 import dev.klerkframework.klerk.Translation
 import dev.klerkframework.klerk.Unauthenticated
 import dev.klerkframework.klerk.VoidEventNoParameters
-import dev.klerkframework.klerk.collection.AllModelView
 import dev.klerkframework.klerk.collection.ModelView
 import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.collection.QueryListCursor
@@ -124,8 +123,8 @@ fun createSpecification(views: MyViews): Specification<Context, MyViews> {
 
 fun testSettings(storage: Persistence = RamStorage()): KlerkSettings = KlerkSettings(persistence = storage)
 
-fun myContextProvider(systemIdentity: SystemIdentity): Context {
-    return Context(systemIdentity)
+fun myContextProvider(): Context {
+    return Context(SystemIdentity)
 }
 
 fun cannotReadAstrid(args: ArgsForPropertyAuth<Context, MyViews>): NegativeAuthorization {
@@ -181,7 +180,7 @@ class BookCollections : ModelViews<Book, Context>() {
     }
 }
 
-class AuthorCollections<V>(val allBooks: AllModelView<Book, Context>) : ModelViews<Author, Context>() {
+class AuthorCollections<V>(val allBooks: ModelView<Book, Context>) : ModelViews<Author, Context>() {
 
     private val greatAuthorNames = setOf("Linus", "Bertil")
 
@@ -565,7 +564,7 @@ class AverageScore(value: Float) : FloatContainer(value) {
 
 class AuthorsWithAtLeastTwoBooks<V>(
     private val authors: ModelView<Author, Context>,
-    private val books: AllModelView<Book, Context>,
+    private val books: ModelView<Book, Context>,
 ) : ModelView<Author, Context>(authors) {
 
     override fun <V> memberIds(reader: ModelReader<Context, V>): Sequence<ModelID<Author>> {
