@@ -62,7 +62,7 @@ import dev.klerkframework.klerk.misc.FlowChartAlgorithm
 import dev.klerkframework.klerk.read.ModelReader
 import dev.klerkframework.klerk.storage.Persistence
 import dev.klerkframework.klerk.storage.RamStorage
-import dev.klerkframework.klerk.validation.PropertyValidation
+import dev.klerkframework.klerk.validation.PropertyValidity
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -86,38 +86,24 @@ fun createSpecification(views: MyViews): Specification<Context, MyViews> {
         }
         authorization {
             readModels {
-                positive {
-                    rule(::`Everybody can read`)
-                }
-                negative {
-                    rule(::pelleCannotReadOnMornings)
-                    rule(::unauthenticatedCannotReadAstrid)
-                }
+                positive(::`Everybody can read`)
+                negative(::pelleCannotReadOnMornings, ::unauthenticatedCannotReadAstrid)
             }
 
             readProperties {
-                positive {
-                    rule(::canReadAllProperties)
-                }
-                negative {
-                    rule(::cannotReadAstrid)
-                    rule(::cannotReadFax)
-                    rule(::unauthenticatedCannotReadAverageScore)
-                    rule(::unauthenticatedCannotReadBookTitle)
-                }
+                positive(::canReadAllProperties)
+                negative(
+                    ::cannotReadAstrid,
+                    ::cannotReadFax,
+                    ::unauthenticatedCannotReadAverageScore,
+                    ::unauthenticatedCannotReadBookTitle,
+                )
             }
             commands {
-                positive {
-                    rule(::`Everybody can do everything`)
-                }
-                negative {
-                }
+                positive(::`Everybody can do everything`)
             }
             eventLog {
-                positive {
-                    rule(::`Everybody can read event log`)
-                }
-                negative {}
+                positive(::`Everybody can read event log`)
             }
         }
         systemContextProvider(::myContextProvider)
@@ -403,13 +389,13 @@ class EvenIntContainer(value: Int) : IntContainer(value) {
     override val min: Int = Int.MIN_VALUE
     override val max: Int = Int.MAX_VALUE
 
-    override val validators: Set<(Int, Translation) -> PropertyValidation> = setOf(::mustBeEven)
+    override val validators: Set<(Int, Translation) -> PropertyValidity> = setOf(::mustBeEven)
 
-    fun mustBeEven(value: Int, translation: Translation): PropertyValidation {
+    fun mustBeEven(value: Int, translation: Translation): PropertyValidity {
         if (value % 2 == 0) {
-            return PropertyValidation.Valid
+            return PropertyValidity.Valid
         }
-        return PropertyValidation.Invalid("Must be even")
+        return PropertyValidity.Invalid("Must be even")
     }
 
 }
@@ -433,8 +419,8 @@ class BookTitle(value: String) : StringContainer(value) {
     override val regexPattern = ".*"
     override val validators = setOf(::`title must be catchy`)
 
-    private fun `title must be catchy`(title: String, translation: Translation): PropertyValidation {
-        return PropertyValidation.Valid
+    private fun `title must be catchy`(title: String, translation: Translation): PropertyValidity {
+        return PropertyValidity.Valid
     }
 }
 
@@ -474,25 +460,14 @@ fun addStandardTestConfiguration(auth: Boolean = true): SpecificationBuilder<Con
     if (auth) {
         authorization {
             readModels {
-                positive {
-                    rule(::`Everybody can read`)
-                }
-                negative {
-                    rule(::pelleCannotReadOnMornings)
-                }
+                positive(::`Everybody can read`)
+                negative(::pelleCannotReadOnMornings)
             }
             commands {
-                positive {
-                    rule(::`Everybody can do everything`)
-                }
-                negative {
-                }
+                positive(::`Everybody can do everything`)
             }
             eventLog {
-                positive {
-                    rule(::`Everybody can read event log`)
-                }
-                negative {}
+                positive(::`Everybody can read event log`)
             }
         }
     }
