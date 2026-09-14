@@ -102,6 +102,8 @@ fun createSpecification(views: MyViews): Specification<Context, MyViews> {
                 negative {
                     rule(::cannotReadAstrid)
                     rule(::cannotReadFax)
+                    rule(::unauthenticatedCannotReadAverageScore)
+                    rule(::unauthenticatedCannotReadBookTitle)
                 }
             }
             commands {
@@ -134,6 +136,14 @@ fun cannotReadAstrid(args: PropertyReadRuleArgs<Context, MyViews>): NegativeAuth
 
 fun cannotReadFax(args: PropertyReadRuleArgs<Context, MyViews>): NegativeAuthorization {
     return if (args.property is FaxNumber) Deny else Pass
+}
+
+fun unauthenticatedCannotReadAverageScore(args: PropertyReadRuleArgs<Context, MyViews>): NegativeAuthorization {
+    return if (args.property is AverageScore && args.context.actor is Unauthenticated) Deny else Pass
+}
+
+fun unauthenticatedCannotReadBookTitle(args: PropertyReadRuleArgs<Context, MyViews>): NegativeAuthorization {
+    return if (args.property is BookTitle && args.context.actor is Unauthenticated) Deny else Pass
 }
 
 fun canReadAllProperties(args: PropertyReadRuleArgs<Context, MyViews>): PositiveAuthorization {
@@ -223,7 +233,7 @@ object MyOtherJob : JobType.Local<String, Context, MyViews>() {
     override val name: JobName = JobName("my-other-job")
     override val agent: JobAgent = JobAgent.System
 
-    override suspend fun step(args: JobStepArgs.Local<String, Context, MyViews>): JobResult<String> {
+    override suspend fun step(args: JobStepArgs.Local<String, Context, MyViews>): JobResult<String, Context, MyViews> {
         println("Job started")
         return JobResult.Success()
     }
@@ -393,10 +403,10 @@ class EvenIntContainer(value: Int) : IntContainer(value) {
     override val min: Int = Int.MIN_VALUE
     override val max: Int = Int.MAX_VALUE
 
-    override val validators: Set<(translator: Translation) -> PropertyValidation> = setOf(::mustBeEven)
+    override val validators: Set<(Int, Translation) -> PropertyValidation> = setOf(::mustBeEven)
 
-    fun mustBeEven(translator: Translation): PropertyValidation {
-        if (valueWithoutAuthorization % 2 == 0) {
+    fun mustBeEven(value: Int, translation: Translation): PropertyValidation {
+        if (value % 2 == 0) {
             return PropertyValidation.Valid
         }
         return PropertyValidation.Invalid("Must be even")
@@ -423,7 +433,7 @@ class BookTitle(value: String) : StringContainer(value) {
     override val regexPattern = ".*"
     override val validators = setOf(::`title must be catchy`)
 
-    private fun `title must be catchy`(translator: Translation): PropertyValidation {
+    private fun `title must be catchy`(title: String, translation: Translation): PropertyValidation {
         return PropertyValidation.Valid
     }
 }
@@ -548,7 +558,7 @@ object MyJob : JobType.Local<String, Context, MyViews>() {
     override val name: JobName = JobName("my-job")
     override val agent: JobAgent = JobAgent.System
 
-    override suspend fun step(args: JobStepArgs.Local<String, Context, MyViews>): JobResult<String> {
+    override suspend fun step(args: JobStepArgs.Local<String, Context, MyViews>): JobResult<String, Context, MyViews> {
         return JobResult.Success()
     }
 }

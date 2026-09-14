@@ -370,8 +370,10 @@ private fun buildModelObjectType(typeName: String, propsType: GraphQLObjectType)
 private fun resolveGraphQLType(field: SchemaField, scalarMap: MutableMap<String, GraphQLScalarType>, enumTypeMap: MutableMap<String, GraphQLEnumType>): GraphQLOutputType {
     if (field.isCollection) return Scalars.GraphQLString
     return when (field.type) {
-        PropertyType.Int -> Scalars.GraphQLInt
-        PropertyType.Float -> Scalars.GraphQLFloat
+        PropertyType.Int, PropertyType.Short, PropertyType.Byte, PropertyType.UShort, PropertyType.UByte ->
+            Scalars.GraphQLInt
+        // Long, UInt and ULong do not fit in a GraphQL Int, so they are serialized as strings (the else branch).
+        PropertyType.Float, PropertyType.Double -> Scalars.GraphQLFloat
         PropertyType.Boolean -> Scalars.GraphQLBoolean
         PropertyType.Instant -> getOrCreateScalar("Instant", Scalars.GraphQLString, scalarMap) { it.toString() }
         PropertyType.Duration -> getOrCreateScalar("Duration", Scalars.GraphQLString, scalarMap) { it.toString() }
@@ -406,18 +408,25 @@ private fun getOrCreateEnumType(field: SchemaField, enumTypeMap: MutableMap<Stri
     }
 }
 
+/**
+ * A value as the scalar its GraphQL type expects (see [resolveGraphQLType]).
+ *
+ * A property the actor may not read is null, whatever its type. The masked text is not an option for a Float, Int or
+ * Boolean field — coercing would fail the whole field — and a String that sometimes holds a value and sometimes holds
+ * a sentinel would be worse than one rule for everything. The generic `KlerkField.value` still shows the mask; it is
+ * a String on purpose, for display.
+ */
 private fun serializeValue(value: Any?): Any? {
     if (value == null) return null
     return when (value) {
-        is StringContainer -> try { value.toString() } catch (e: Exception) { null }
-        is IntContainer -> try { value.toString() } catch (e: Exception) { null }
-        is LongContainer -> try { value.toString() } catch (e: Exception) { null }
-        is FloatContainer -> try { value.toString() } catch (e: Exception) { null }
-        is BooleanContainer -> try { value.toString() } catch (e: Exception) { null }
-        is InstantContainer -> try { value.value.toString() } catch (e: Exception) { null }
-        is DurationContainer -> try { value.value.toString() } catch (e: Exception) { null }
-        is GeoPositionContainer -> try { value.value.toString() } catch (e: Exception) { null }
-        is EnumContainer<*> -> try { value.value.toString() } catch (e: Exception) { null }
+        // toString() rather than the value itself, since a container may override it to format the value.
+        is StringContainer -> value.valueOrNullIfNotAuthorized?.let { value.toString() }
+        is NumberContainer<*> -> value.valueOrNullIfNotAuthorized?.let(::graphQLNumber)
+        is BooleanContainer -> value.valueOrNullIfNotAuthorized
+        is InstantContainer -> value.valueOrNullIfNotAuthorized?.toString()
+        is DurationContainer -> value.valueOrNullIfNotAuthorized?.toString()
+        is GeoPositionContainer -> value.valueOrNullIfNotAuthorized?.toString()
+        is EnumContainer<*> -> value.valueOrNullIfNotAuthorized?.toString()
         is kotlin.time.Instant -> value.toString()
         is kotlin.time.Duration -> value.toString()
         is ModelID<*> -> value.toString()
@@ -431,6 +440,20 @@ private fun serializeValue(value: Any?): Any? {
         else -> value.toString()
     }
 }
+
+/**
+ * Mirrors [resolveGraphQLType]: the kinds that fit a GraphQL Int are handed over as a [Number], and Long, UInt and
+ * ULong as text, since they do not. Unsigned values are not [Number]s, so the coercing would reject them as they are.
+ */
+private fun graphQLNumber(value: Any): Any = when (value) {
+    is UByte -> value.toInt()
+    is UShort -> value.toInt()
+    is Long, is UInt, is ULong -> value.toString()
+    else -> value
+}
+
+/** True if the actor was denied this property, so it renders as the mask rather than as its value. */
+private fun isMasked(value: Any?): Boolean = value is DataContainer<*> && value.valueOrNullIfNotAuthorized == null
 
 // ---------------------------------------------------------------------------
 // Data fetchers
@@ -622,10 +645,12 @@ private fun <C : KlerkContext, V> genericModelMap(
     klerk: Klerk<C, V>
 ): Map<String, Any?> {
     val props = ObjectSchema.of(model.props::class).fields.map { field ->
+        val value = field.get(model.props)
         mapOf(
             "name" to field.name,
             "type" to field.valueClass.simpleName,
-            "value" to serializeValue(field.get(model.props))
+            // KlerkField.value is a String, so a denied property can show the mask here rather than disappear.
+            "value" to if (isMasked(value)) value.toString() else serializeValue(value)
         )
     }
     val commands = eventReferences.map { commandToMap(it, klerk.specification.parametersSchema(it)) }

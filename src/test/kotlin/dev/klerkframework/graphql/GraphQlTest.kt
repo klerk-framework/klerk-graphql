@@ -57,7 +57,7 @@ fun main() {
 
         embeddedServer.start(wait = false)
 
-        klerk.models.subscribe(Context.system(), null).collect {
+        klerk.modelChanges.subscribe(null, Context.system()).collect {
             when (it) {
                 is Created -> println("${it.id} was created")
                 is PropsUpdated -> println("${it.id} had props updated")
