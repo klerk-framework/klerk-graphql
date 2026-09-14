@@ -73,11 +73,11 @@ private fun contextFactory(graphQlContext: GraphQLContext) = Context.unauthentic
 
 private suspend fun createShop(klerk: Klerk<Context, MyViews>) {
     klerk.handle(Command(
-        event = CreateShop,
-        model = null,
-        params = CreateShopParams(
+        CreateShop,
+        CreateShopParams(
             faxNumber = null
         )
+    
     ),
         Context.system(),
     )

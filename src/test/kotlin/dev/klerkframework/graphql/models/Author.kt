@@ -109,7 +109,7 @@ fun authorStateMachine(collections: MyViews): StateMachine<Author, AuthorStates,
             }
 
             onEvent(DeleteAuthorAndBooks) {
-                createCommands(::eventsToDeleteAuthorAndBooks)
+                commands(::eventsToDeleteAuthorAndBooks)
             }
 
             onEvent(ImproveAuthor) {

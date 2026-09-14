@@ -36,14 +36,13 @@ class ConnectionTest {
     private suspend fun createAuthor(klerk: Klerk<Context, MyViews>, first: String, last: String): ModelID<Author> =
         klerk.handle(
             Command(
-                event = CreateAuthor,
-                model = null,
-                params = CreateAuthorParams(
+                CreateAuthor,
+                CreateAuthorParams(
                     firstName = FirstName(first),
                     lastName = LastName(last),
                     phone = PhoneNumber("+46123456"),
                     secretToken = SecretPasscode(1),
-                ),
+                )
             ),
             Context.system(),
         ).getOrThrow().primaryModel!!

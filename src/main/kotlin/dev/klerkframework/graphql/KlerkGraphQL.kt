@@ -414,9 +414,9 @@ private fun serializeValue(value: Any?): Any? {
         is LongContainer -> try { value.toString() } catch (e: Exception) { null }
         is FloatContainer -> try { value.toString() } catch (e: Exception) { null }
         is BooleanContainer -> try { value.toString() } catch (e: Exception) { null }
-        is InstantContainer -> try { value.instant.toString() } catch (e: Exception) { null }
-        is DurationContainer -> try { value.duration.toString() } catch (e: Exception) { null }
-        is GeoPositionContainer -> try { value.geoPosition.toString() } catch (e: Exception) { null }
+        is InstantContainer -> try { value.value.toString() } catch (e: Exception) { null }
+        is DurationContainer -> try { value.value.toString() } catch (e: Exception) { null }
+        is GeoPositionContainer -> try { value.value.toString() } catch (e: Exception) { null }
         is EnumContainer<*> -> try { value.value.toString() } catch (e: Exception) { null }
         is kotlin.time.Instant -> value.toString()
         is kotlin.time.Duration -> value.toString()
@@ -471,7 +471,7 @@ private fun connectionOptions(env: DataFetchingEnvironment): QueryOptions {
         requireNotNull(before) { "'last' needs 'before'; to read from the start of the collection use 'first'" }
         return QueryOptions(
             maxItems = last ?: DEFAULT_PAGE_SIZE,
-            cursor = QueryListCursor.fromString(before),
+            cursor = QueryListCursor.parse(before),
             direction = PageDirection.BEFORE,
             countTotal = true,
         )
@@ -479,7 +479,7 @@ private fun connectionOptions(env: DataFetchingEnvironment): QueryOptions {
     // Relay's `after` is exclusive: the page starts at the item following the one the cursor names.
     return QueryOptions(
         maxItems = first ?: DEFAULT_PAGE_SIZE,
-        cursor = after?.let { QueryListCursor.fromString(it) },
+        cursor = after?.let { QueryListCursor.parse(it) },
         direction = if (after == null) PageDirection.FROM else PageDirection.AFTER,
         countTotal = true,
     )
@@ -517,7 +517,7 @@ private suspend fun <C : KlerkContext, V> modelsDataFetcher(
         @Suppress("UNCHECKED_CAST")
         jackson.readValue(whereJson, Map::class.java) as Map<String, Any>
     } else null
-    val collection = klerk.specification.getCollection(CollectionId.from(collectionId))
+    val collection = klerk.specification.getCollection(CollectionId.parse(collectionId))
     // The filter goes into the query, so `first: 10` really does return ten matching models when there are ten.
     val result = klerk.read(context) {
         collection.query(connectionOptions(env)) { whereMap == null || matchesWhere(it.props, whereMap) }
@@ -580,7 +580,7 @@ private suspend fun <C : KlerkContext, V> typedModelsDataFetcher(
     val stateFilter = env.getArgument<Map<String, Any>?>("state")
     @Suppress("UNCHECKED_CAST")
     val createdAtFilter = env.getArgument<Map<String, Any>?>("createdAt")
-    val collection = klerk.specification.getCollection(CollectionId.from(collectionId))
+    val collection = klerk.specification.getCollection(CollectionId.parse(collectionId))
     // Every filter goes into the query, so a page is full whenever enough models match.
     val result = klerk.read(context) {
         collection.query(connectionOptions(env)) { item ->
@@ -785,15 +785,15 @@ private suspend fun <C : KlerkContext, V> createCommandDataFetcher(
     val paramsJson = env.getArgument<String>("paramsJson")!!
     val dryRun = env.getArgument<Boolean>("dryRun")!!
 
-    val eventObj = klerk.specification.getEvent(EventReference.from(event))
+    val eventObj = klerk.specification.getEvent(EventReference.parse(event))
     val parameterInfo = klerk.specification.getParameters(eventObj.id)
     val paramsObject = parameterInfo?.fromJson(paramsJson)
 
     val result = klerk.handle(
-        Command(
-            event = eventObj,
-            model = if (modelArg == null) null else ModelID(modelArg.toInt()),
-            params = paramsObject,
+        Command.dynamic(
+            eventObj,
+            if (modelArg == null) null else ModelID(modelArg.toInt()),
+            paramsObject
         ),
         context,
         ProcessingOptions(CommandToken.simple(), dryRun = dryRun)
