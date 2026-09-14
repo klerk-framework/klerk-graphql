@@ -25,9 +25,9 @@ import dev.klerkframework.graphql.onEnterImprovingStateActionCallback
 import dev.klerkframework.graphql.onlyAuthenticationIdentityCanCreateDaniel
 import dev.klerkframework.graphql.secretTokenShouldBeZeroIfNameStartsWithM
 import dev.klerkframework.graphql.updateAuthor
-import dev.klerkframework.klerk.ArgForInstanceEvent
+import dev.klerkframework.klerk.InstanceEventArgs
 import dev.klerkframework.klerk.LifecycleArgs
-import dev.klerkframework.klerk.ArgForVoidEvent
+import dev.klerkframework.klerk.VoidEventArgs
 import dev.klerkframework.klerk.EventVisibility.External
 import dev.klerkframework.klerk.InstanceEventNoParameters
 import dev.klerkframework.klerk.InstanceEventWithParameters
@@ -188,7 +188,7 @@ fun onEnterImprovingStateAction(args: LifecycleArgs<Author, Context, MyViews>) {
 }
 
 
-fun showNotification(args: ArgForInstanceEvent<Author, Nothing?, Context, MyViews>) {
+fun showNotification(args: InstanceEventArgs<Author, Nothing?, Context, MyViews>) {
     println("It was decided that we should show a notification")
 }
 
@@ -199,7 +199,7 @@ fun onEnterAmateurStateAction(args: LifecycleArgs<Author, Context, MyViews>) {
 }
 
 
-fun notifyBookStores(args: ArgForInstanceEvent<Author, ChangeNameParams, Context, MyViews>): List<DeclaredJob<Context, MyViews>> {
+fun notifyBookStores(args: InstanceEventArgs<Author, ChangeNameParams, Context, MyViews>): List<DeclaredJob<Context, MyViews>> {
     return listOf(MyOtherJob.declare(""))
 }
 
@@ -239,7 +239,7 @@ object ImproveAuthor : InstanceEventNoParameters<Author>(External)
 
 object ChangeName : InstanceEventWithParameters<Author, ChangeNameParams>(External)
 
-fun changeNameOfAuthor(args: ArgForInstanceEvent<Author, ChangeNameParams, Context, MyViews>): Author {
+fun changeNameOfAuthor(args: InstanceEventArgs<Author, ChangeNameParams, Context, MyViews>): Author {
     return args.model.props.copy(
         firstName = args.command.params.updatedFirstName,
         lastName = args.command.params.updatedLastName
@@ -248,7 +248,7 @@ fun changeNameOfAuthor(args: ArgForInstanceEvent<Author, ChangeNameParams, Conte
 
 object CreateAuthorTheAdvancedWay : VoidEventWithParameters<Author, AdvancedParams>(External)
 
-fun newAuthorFromAdvancedParams(args: ArgForVoidEvent<Author, AdvancedParams, Context, MyViews>): Author {
+fun newAuthorFromAdvancedParams(args: VoidEventArgs<Author, AdvancedParams, Context, MyViews>): Author {
     println("Doing something with ${args.command.params.titles.joinToString { it.title.value }} and ${args.command.params.averageScore.value}")
     return Author(
         firstName = FirstName("Advanced"),

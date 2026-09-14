@@ -609,7 +609,7 @@ private fun <C : KlerkContext, V> typedModelMap(
         "state" to model.state,
         "createdAt" to model.createdAt,
         "lastModifiedAt" to model.lastModifiedAt,
-        "lastPropsModifiedAt" to model.lastPropsUpdateAt,
+        "lastPropsModifiedAt" to model.lastPropsUpdatedAt,
         "lastStateTransitionAt" to model.lastStateTransitionAt,
         "props" to model.props,
         "possibleEvents" to commands
@@ -635,7 +635,7 @@ private fun <C : KlerkContext, V> genericModelMap(
         "state" to model.state,
         "createdAt" to model.createdAt,
         "lastModifiedAt" to model.lastModifiedAt,
-        "lastPropsModifiedAt" to model.lastPropsUpdateAt,
+        "lastPropsModifiedAt" to model.lastPropsUpdatedAt,
         "lastStateTransitionAt" to model.lastStateTransitionAt,
         "props" to props,
         "possibleEvents" to commands

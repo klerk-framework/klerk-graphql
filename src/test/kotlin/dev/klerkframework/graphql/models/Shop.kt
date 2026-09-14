@@ -2,7 +2,7 @@ package dev.klerkframework.graphql.models
 
 import dev.klerkframework.graphql.Context
 import dev.klerkframework.graphql.MyViews
-import dev.klerkframework.klerk.ArgForVoidEvent
+import dev.klerkframework.klerk.VoidEventArgs
 import dev.klerkframework.klerk.EventVisibility.External
 import dev.klerkframework.klerk.InstanceEventNoParameters
 import dev.klerkframework.klerk.ModelID
@@ -67,7 +67,7 @@ enum class ShopSizeEnum {
 class ShopSize(value: ShopSizeEnum) : EnumContainer<ShopSizeEnum>(value) {
 }
 
-fun newShop(args: ArgForVoidEvent<Shop, CreateShopParams, Context, MyViews>): Shop {
+fun newShop(args: VoidEventArgs<Shop, CreateShopParams, Context, MyViews>): Shop {
     val params = args.command.params
     return Shop(faxNumber = params.faxNumber, bestSellers = emptyList(), shopSize = ShopSize(ShopSizeEnum.Small))
 }

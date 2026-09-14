@@ -1,5 +1,6 @@
 package dev.klerkframework.graphql
 
+import dev.klerkframework.klerk.view.asSequenceOrThrow
 import dev.klerkframework.graphql.AuthorStates.*
 import dev.klerkframework.graphql.models.Author
 import dev.klerkframework.graphql.models.Book
@@ -15,12 +16,12 @@ import dev.klerkframework.graphql.models.authorStateMachine
 import dev.klerkframework.graphql.models.bookStateMachine
 import dev.klerkframework.graphql.models.shopStateMachine
 import dev.klerkframework.klerk.ActorIdentity
-import dev.klerkframework.klerk.ArgCommandContextReader
-import dev.klerkframework.klerk.ArgContextReader
-import dev.klerkframework.klerk.ArgForInstanceEvent
-import dev.klerkframework.klerk.ArgForVoidEvent
-import dev.klerkframework.klerk.ArgModelContextReader
-import dev.klerkframework.klerk.ArgsForPropertyAuth
+import dev.klerkframework.klerk.CommandRuleArgs
+import dev.klerkframework.klerk.EventLogRuleArgs
+import dev.klerkframework.klerk.InstanceEventArgs
+import dev.klerkframework.klerk.VoidEventArgs
+import dev.klerkframework.klerk.ModelReadRuleArgs
+import dev.klerkframework.klerk.PropertyReadRuleArgs
 import dev.klerkframework.klerk.AuthenticationIdentity
 import dev.klerkframework.klerk.EventVisibility.External
 import dev.klerkframework.klerk.Klerk
@@ -127,38 +128,38 @@ fun myContextProvider(): Context {
     return Context(SystemIdentity)
 }
 
-fun cannotReadAstrid(args: ArgsForPropertyAuth<Context, MyViews>): NegativeAuthorization {
+fun cannotReadAstrid(args: PropertyReadRuleArgs<Context, MyViews>): NegativeAuthorization {
     return if (args.property is FirstName && args.property.valueWithoutAuthorization == "Astrid") Deny else Pass
 }
 
-fun cannotReadFax(args: ArgsForPropertyAuth<Context, MyViews>): NegativeAuthorization {
+fun cannotReadFax(args: PropertyReadRuleArgs<Context, MyViews>): NegativeAuthorization {
     return if (args.property is FaxNumber) Deny else Pass
 }
 
-fun canReadAllProperties(args: ArgsForPropertyAuth<Context, MyViews>): PositiveAuthorization {
+fun canReadAllProperties(args: PropertyReadRuleArgs<Context, MyViews>): PositiveAuthorization {
     return PositiveAuthorization.Allow
 }
 
-fun unauthenticatedCannotReadAstrid(args: ArgModelContextReader<Context, MyViews>): NegativeAuthorization {
+fun unauthenticatedCannotReadAstrid(args: ModelReadRuleArgs<Context, MyViews>): NegativeAuthorization {
     val props = args.model.props
     return if (props is Author && props.firstName.value == "Astrid" && args.context.actor is Unauthenticated) Deny else Pass
 }
 
-fun `Everybody can do everything`(argCommandContextReader: ArgCommandContextReader<*, Context, MyViews>): PositiveAuthorization {
+fun `Everybody can do everything`(argCommandContextReader: CommandRuleArgs<*, Context, MyViews>): PositiveAuthorization {
     return PositiveAuthorization.Allow
 }
 
 
-fun `Everybody can read event log`(args: ArgContextReader<Context, MyViews>): PositiveAuthorization {
+fun `Everybody can read event log`(args: EventLogRuleArgs<Context, MyViews>): PositiveAuthorization {
     return PositiveAuthorization.Allow
 }
 
-fun `Everybody can read`(args: ArgModelContextReader<Context, MyViews>): PositiveAuthorization {
+fun `Everybody can read`(args: ModelReadRuleArgs<Context, MyViews>): PositiveAuthorization {
     return PositiveAuthorization.Allow
 }
 
 fun pelleCannotReadOnMornings(
-    args: ArgModelContextReader<Context, MyViews>
+    args: ModelReadRuleArgs<Context, MyViews>
 ): NegativeAuthorization {
     try {
         if (args.context.user?.props?.name?.value.equals("Pelle")) {
@@ -229,7 +230,7 @@ object MyOtherJob : JobType.Local<String, Context, MyViews>() {
 }
 
 
-fun eventsToDeleteAuthorAndBooks(args: ArgForInstanceEvent<Author, Nothing?, Context, MyViews>): List<Command<Any, Any>> {
+fun eventsToDeleteAuthorAndBooks(args: InstanceEventArgs<Author, Nothing?, Context, MyViews>): List<Command<Any, Any>> {
     args.reader.apply {
         val result: MutableList<Command<Any, Any>> = mutableListOf()
         val books = referencing(Book::class, requireNotNull(args.model.id))
@@ -248,7 +249,7 @@ fun eventsToDeleteAuthorAndBooks(args: ArgForInstanceEvent<Author, Nothing?, Con
     }
 }
 
-fun newAuthor(args: ArgForVoidEvent<Author, CreateAuthorParams, Context, MyViews>): Author {
+fun newAuthor(args: VoidEventArgs<Author, CreateAuthorParams, Context, MyViews>): Author {
     val params = args.command.params
     return Author(
         firstName = params.firstName,
@@ -257,25 +258,25 @@ fun newAuthor(args: ArgForVoidEvent<Author, CreateAuthorParams, Context, MyViews
     )
 }
 
-fun newAuthor2(args: ArgForVoidEvent<Author, Nothing?, Context, MyViews>): Author {
+fun newAuthor2(args: VoidEventArgs<Author, Nothing?, Context, MyViews>): Author {
     return Author(FirstName("Auto"), LastName("Created"), Address(Street("Somewhere")))
 }
 
 
-fun updateAuthor(args: ArgForInstanceEvent<Author, Author, Context, MyViews>): Author {
+fun updateAuthor(args: InstanceEventArgs<Author, Author, Context, MyViews>): Author {
     return args.command.params
 }
 
 
-fun onlyAuthenticationIdentityCanCreateDaniel(args: ArgForVoidEvent<Author, CreateAuthorParams, Context, MyViews>): PropertyCollectionValidity {
+fun onlyAuthenticationIdentityCanCreateDaniel(args: VoidEventArgs<Author, CreateAuthorParams, Context, MyViews>): PropertyCollectionValidity {
     return if (args.command.params.firstName.value == "Daniel" && args.context.actor != AuthenticationIdentity) Invalid() else Valid
 }
 
-fun cannotHaveAnAwfulName(args: ArgForVoidEvent<Author, CreateAuthorParams, Context, MyViews>): PropertyCollectionValidity {
+fun cannotHaveAnAwfulName(args: VoidEventArgs<Author, CreateAuthorParams, Context, MyViews>): PropertyCollectionValidity {
     return if (args.command.params.firstName.value == "Mike" && args.command.params.lastName.value == "Litoris") Invalid() else Valid
 }
 
-fun secretTokenShouldBeZeroIfNameStartsWithM(args: ArgForVoidEvent<Author, CreateAuthorParams, Context, MyViews>): PropertyCollectionValidity {
+fun secretTokenShouldBeZeroIfNameStartsWithM(args: VoidEventArgs<Author, CreateAuthorParams, Context, MyViews>): PropertyCollectionValidity {
     return if (args.command.params.firstName.value.startsWith("M") && args.command.params.secretToken.value != 0L) Invalid() else Valid
 }
 
@@ -283,7 +284,7 @@ fun preventUnauthenticated(context: Context): PropertyCollectionValidity {
     return if (context.actor == Unauthenticated) Invalid("Must log in") else Valid
 }
 
-fun onlyAllowAuthorNameAstridIfThereIsNoRowling(args: ArgForVoidEvent<Author, CreateAuthorParams, Context, MyViews>): PropertyCollectionValidity {
+fun onlyAllowAuthorNameAstridIfThereIsNoRowling(args: VoidEventArgs<Author, CreateAuthorParams, Context, MyViews>): PropertyCollectionValidity {
     args.reader.apply {
         if (args.command.params.firstName.value != "Astrid") {
             return Valid
@@ -490,22 +491,22 @@ fun addStandardTestConfiguration(auth: Boolean = true): SpecificationBuilder<Con
 @OptIn(ExperimentalKlerkApi::class)
 sealed class AlwaysFalseDecisions(
     override val name: String,
-    override val function: (ArgForInstanceEvent<Author, CreateAuthorParams, Context, MyViews>) -> Boolean
-) : Decision<Boolean, ArgForInstanceEvent<Author, CreateAuthorParams, Context, MyViews>> {
+    override val function: (InstanceEventArgs<Author, CreateAuthorParams, Context, MyViews>) -> Boolean
+) : Decision<Boolean, InstanceEventArgs<Author, CreateAuthorParams, Context, MyViews>> {
     data object Something : AlwaysFalseDecisions("This will always be false", ::alwaysFalse)
 
 }
 
-fun alwaysFalse(args: ArgForInstanceEvent<Author, CreateAuthorParams, Context, MyViews>): Boolean {
+fun alwaysFalse(args: InstanceEventArgs<Author, CreateAuthorParams, Context, MyViews>): Boolean {
     return false
 }
 
 
 @OptIn(ExperimentalKlerkApi::class)
 object AlwaysFalseAlgorithm :
-    FlowChartAlgorithm<ArgForInstanceEvent<Author, CreateAuthorParams, Context, MyViews>, Boolean>("Always false") {
+    FlowChartAlgorithm<InstanceEventArgs<Author, CreateAuthorParams, Context, MyViews>, Boolean>("Always false") {
 
-    override fun configure(): AlgorithmBuilder<ArgForInstanceEvent<Author, CreateAuthorParams, Context, MyViews>, Boolean>.() -> Unit =
+    override fun configure(): AlgorithmBuilder<InstanceEventArgs<Author, CreateAuthorParams, Context, MyViews>, Boolean>.() -> Unit =
         {
             start(AlwaysFalseDecisions.Something)
             booleanNode(AlwaysFalseDecisions.Something) {
@@ -564,7 +565,7 @@ class AuthorsWithAtLeastTwoBooks<V>(
 ) : ModelView<Author, Context>(authors) {
 
     override fun <V> memberIds(reader: ModelReader<Context, V>): Sequence<ModelID<Author>> {
-        val authorsWithTwoBooks = books.withReader(reader)
+        val authorsWithTwoBooks = with(reader) { books.asSequenceOrThrow() }
             .groupingBy { it.props.author }
             .eachCount()
             .filterValues { it >= 2 }

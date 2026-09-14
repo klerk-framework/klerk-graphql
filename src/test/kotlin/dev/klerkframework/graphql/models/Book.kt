@@ -9,8 +9,8 @@ import dev.klerkframework.graphql.MyViews
 import dev.klerkframework.graphql.Quantity
 import dev.klerkframework.graphql.ReadingTime
 import dev.klerkframework.graphql.ReleasePartyPosition
-import dev.klerkframework.klerk.ArgForInstanceEvent
-import dev.klerkframework.klerk.ArgForVoidEvent
+import dev.klerkframework.klerk.InstanceEventArgs
+import dev.klerkframework.klerk.VoidEventArgs
 import dev.klerkframework.klerk.EventVisibility.External
 import dev.klerkframework.klerk.InstanceEventNoParameters
 import dev.klerkframework.klerk.ModelID
@@ -111,12 +111,12 @@ data class AdvancedParams(
 
 data class SimpleParamsPart(val title: BookTitle)
 
-fun setPublishTime(args: ArgForInstanceEvent<Book, Nothing?, Context, MyViews>): Book {
+fun setPublishTime(args: InstanceEventArgs<Book, Nothing?, Context, MyViews>): Book {
     return args.model.props.copy(publishedAt = BookWrittenAt(args.context.time))
 }
 
 
-fun newBook(args: ArgForVoidEvent<Book, CreateBookParams, Context, MyViews>): Book {
+fun newBook(args: VoidEventArgs<Book, CreateBookParams, Context, MyViews>): Book {
     val params = args.command.params
     return Book(
         title = params.title,
