@@ -41,10 +41,10 @@ import dev.klerkframework.klerk.SystemIdentity
 import dev.klerkframework.klerk.Translation
 import dev.klerkframework.klerk.Unauthenticated
 import dev.klerkframework.klerk.VoidEventNoParameters
-import dev.klerkframework.klerk.collection.ModelView
-import dev.klerkframework.klerk.collection.ModelViews
-import dev.klerkframework.klerk.collection.QueryListCursor
-import dev.klerkframework.klerk.collection.asSequence
+import dev.klerkframework.klerk.view.ModelView
+import dev.klerkframework.klerk.view.ModelViews
+import dev.klerkframework.klerk.view.QueryListCursor
+import dev.klerkframework.klerk.view.asSequence
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
@@ -541,7 +541,7 @@ data class Context(
 
 data class User(val name: FirstName)
 
-object AnEventWithoutParameters : VoidEventNoParameters<Author>(Author::class, External)
+object AnEventWithoutParameters : VoidEventNoParameters<Author>(External)
 
 object MyJob : JobType.Local<String, Context, MyViews>() {
     override val name: JobName = JobName("my-job")

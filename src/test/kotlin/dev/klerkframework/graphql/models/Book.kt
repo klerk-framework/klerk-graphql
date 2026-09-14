@@ -15,7 +15,7 @@ import dev.klerkframework.klerk.EventVisibility.External
 import dev.klerkframework.klerk.InstanceEventNoParameters
 import dev.klerkframework.klerk.ModelID
 import dev.klerkframework.klerk.VoidEventWithParameters
-import dev.klerkframework.klerk.collection.ModelView
+import dev.klerkframework.klerk.view.ModelView
 import dev.klerkframework.klerk.datatypes.GeoPosition
 import dev.klerkframework.klerk.statemachine.StateMachine
 import dev.klerkframework.klerk.statemachine.stateMachine
@@ -89,11 +89,11 @@ fun bookStateMachine(allAuthors: ModelView<Author, Context>, collections: MyView
 
     }
 
-object CreateBook : VoidEventWithParameters<Book, CreateBookParams>(Book::class, External, CreateBookParams::class)
+object CreateBook : VoidEventWithParameters<Book, CreateBookParams>(External)
 
-object PublishBook : InstanceEventNoParameters<Book>(Book::class, External)
+object PublishBook : InstanceEventNoParameters<Book>(External)
 
-object DeleteBook : InstanceEventNoParameters<Book>(Book::class, External)
+object DeleteBook : InstanceEventNoParameters<Book>(External)
 
 data class CreateBookParams(
     val title: BookTitle,

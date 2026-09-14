@@ -4,7 +4,7 @@ import dev.klerkframework.graphql.models.CreateShop
 import dev.klerkframework.graphql.models.CreateShopParams
 import dev.klerkframework.graphql.models.FaxNumber
 import dev.klerkframework.klerk.Klerk
-import dev.klerkframework.klerk.collection.ModelViews
+import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions

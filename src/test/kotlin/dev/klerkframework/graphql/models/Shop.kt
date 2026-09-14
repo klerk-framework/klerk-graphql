@@ -42,11 +42,11 @@ fun shopStateMachine(): StateMachine<Shop, ShopStates, Context, MyViews> =
         }
     }
 
-object CreateShop : VoidEventWithParameters<Shop, CreateShopParams>(Shop::class, External, CreateShopParams::class)
+object CreateShop : VoidEventWithParameters<Shop, CreateShopParams>(External)
 
-object PublishShop : InstanceEventNoParameters<Shop>(Shop::class, External)
+object PublishShop : InstanceEventNoParameters<Shop>(External)
 
-object DeleteShop : InstanceEventNoParameters<Shop>(Shop::class, External)
+object DeleteShop : InstanceEventNoParameters<Shop>(External)
 
 data class CreateShopParams(
     val faxNumber: FaxNumber?,

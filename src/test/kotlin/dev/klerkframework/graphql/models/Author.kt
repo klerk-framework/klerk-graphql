@@ -26,7 +26,7 @@ import dev.klerkframework.graphql.onlyAuthenticationIdentityCanCreateDaniel
 import dev.klerkframework.graphql.secretTokenShouldBeZeroIfNameStartsWithM
 import dev.klerkframework.graphql.updateAuthor
 import dev.klerkframework.klerk.ArgForInstanceEvent
-import dev.klerkframework.klerk.ArgForInstanceNonEvent
+import dev.klerkframework.klerk.LifecycleArgs
 import dev.klerkframework.klerk.ArgForVoidEvent
 import dev.klerkframework.klerk.EventVisibility.External
 import dev.klerkframework.klerk.InstanceEventNoParameters
@@ -132,12 +132,10 @@ fun authorStateMachine(collections: MyViews): StateMachine<Author, AuthorStates,
         state(Improving) {
             onEnter {
                 unmanagedJob(::onEnterImprovingStateAction)
-                transitionWhen(
-                    linkedMapOf(
-                        ::isAnImpostor to Amateur,
-                        ::hasTalent to Established,
-                    )
-                )
+                transitionWhen {
+                    on(::isAnImpostor, Amateur)
+                    on(::hasTalent, Established)
+                }
                 jobs(::aJob)
             }
 
@@ -159,31 +157,31 @@ fun authorStateMachine(collections: MyViews): StateMachine<Author, AuthorStates,
 
     }
 
-fun someUpdate(args: ArgForInstanceNonEvent<Author, Context, MyViews>): Author {
+fun someUpdate(args: LifecycleArgs<Author, Context, MyViews>): Author {
     return args.model.props.copy(lastName = LastName("efter"))
 }
 
-fun onExitUpdate(args: ArgForInstanceNonEvent<Author, Context, MyViews>): Author {
+fun onExitUpdate(args: LifecycleArgs<Author, Context, MyViews>): Author {
     return args.model.props.copy(FirstName("Changed name after exit"))
 }
 
-fun sayHello(args: ArgForInstanceNonEvent<Author, Context, MyViews>) {
+fun sayHello(args: LifecycleArgs<Author, Context, MyViews>) {
     println("Hello!")
 }
 
-fun later(args: ArgForInstanceNonEvent<Author, Context, MyViews>): Instant {
+fun later(args: LifecycleArgs<Author, Context, MyViews>): Instant {
     return args.time.plus(30.seconds)
 }
 
-fun hasTalent(args: ArgForInstanceNonEvent<Author, Context, MyViews>): Boolean = true
-fun isAnImpostor(args: ArgForInstanceNonEvent<Author, Context, MyViews>): Boolean = false
+fun hasTalent(args: LifecycleArgs<Author, Context, MyViews>): Boolean = true
+fun isAnImpostor(args: LifecycleArgs<Author, Context, MyViews>): Boolean = false
 
-fun aJob(args: ArgForInstanceNonEvent<Author, Context, MyViews>): List<DeclaredJob<Context, MyViews>> {
+fun aJob(args: LifecycleArgs<Author, Context, MyViews>): List<DeclaredJob<Context, MyViews>> {
     return listOf(MyJob.declare(""))
 }
 
 
-fun onEnterImprovingStateAction(args: ArgForInstanceNonEvent<Author, Context, MyViews>) {
+fun onEnterImprovingStateAction(args: LifecycleArgs<Author, Context, MyViews>) {
     if (onEnterImprovingStateActionCallback != null) {
         onEnterImprovingStateActionCallback!!()
     }
@@ -194,7 +192,7 @@ fun showNotification(args: ArgForInstanceEvent<Author, Nothing?, Context, MyView
     println("It was decided that we should show a notification")
 }
 
-fun onEnterAmateurStateAction(args: ArgForInstanceNonEvent<Author, Context, MyViews>) {
+fun onEnterAmateurStateAction(args: LifecycleArgs<Author, Context, MyViews>) {
     if (onEnterAmateurStateActionCallback != null) {
         onEnterAmateurStateActionCallback!!()
     }
@@ -227,19 +225,19 @@ data class ChangeNameParams(val updatedFirstName: FirstName, val updatedLastName
 
 
 object CreateAuthor :
-    VoidEventWithParameters<Author, CreateAuthorParams>(Author::class, External, CreateAuthorParams::class)
+    VoidEventWithParameters<Author, CreateAuthorParams>(External)
 
-object UpdateAuthor : InstanceEventWithParameters<Author, Author>(Author::class, External, Author::class) {
+object UpdateAuthor : InstanceEventWithParameters<Author, Author>(External) {
 
 }
 
-object DeleteAuthor : InstanceEventNoParameters<Author>(Author::class, External)
+object DeleteAuthor : InstanceEventNoParameters<Author>(External)
 
-object DeleteAuthorAndBooks : InstanceEventNoParameters<Author>(Author::class, External)
+object DeleteAuthorAndBooks : InstanceEventNoParameters<Author>(External)
 
-object ImproveAuthor : InstanceEventNoParameters<Author>(Author::class, External)
+object ImproveAuthor : InstanceEventNoParameters<Author>(External)
 
-object ChangeName : InstanceEventWithParameters<Author, ChangeNameParams>(Author::class, External, ChangeNameParams::class)
+object ChangeName : InstanceEventWithParameters<Author, ChangeNameParams>(External)
 
 fun changeNameOfAuthor(args: ArgForInstanceEvent<Author, ChangeNameParams, Context, MyViews>): Author {
     return args.model.props.copy(
@@ -248,7 +246,7 @@ fun changeNameOfAuthor(args: ArgForInstanceEvent<Author, ChangeNameParams, Conte
     )
 }
 
-object CreateAuthorTheAdvancedWay : VoidEventWithParameters<Author, AdvancedParams>(Author::class, External, AdvancedParams::class)
+object CreateAuthorTheAdvancedWay : VoidEventWithParameters<Author, AdvancedParams>(External)
 
 fun newAuthorFromAdvancedParams(args: ArgForVoidEvent<Author, AdvancedParams, Context, MyViews>): Author {
     println("Doing something with ${args.command.params.titles.joinToString { it.title.value }} and ${args.command.params.averageScore.value}")

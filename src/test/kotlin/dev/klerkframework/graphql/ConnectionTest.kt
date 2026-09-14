@@ -6,7 +6,7 @@ import dev.klerkframework.graphql.models.CreateAuthor
 import dev.klerkframework.graphql.models.CreateAuthorParams
 import dev.klerkframework.klerk.Klerk
 import dev.klerkframework.klerk.ModelID
-import dev.klerkframework.klerk.collection.ModelViews
+import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
@@ -84,7 +84,7 @@ class ConnectionTest {
     }
 
     private fun authorsQuery(args: String) = """
-        { authors(collectionId: "c.Author.all"$args) {
+        { authors(viewId: "v.Author.all"$args) {
             totalCount
             edges { cursor node { props { lastName } } }
             pageInfo { hasNextPage hasPreviousPage startCursor endCursor }
@@ -175,7 +175,7 @@ class ConnectionTest {
 
         val connection = graphql(
             """
-            { authors(collectionId: "c.Author.all", first: 5, where: {firstName: {_eq: "Bertil"}}) {
+            { authors(viewId: "v.Author.all", first: 5, where: {firstName: {_eq: "Bertil"}}) {
                 totalCount
                 edges { node { props { lastName firstName } } }
                 pageInfo { hasNextPage }
@@ -197,7 +197,7 @@ class ConnectionTest {
 
         val connection = graphql(
             """
-            { models(collectionId: "c.Author.all", first: 3) {
+            { models(viewId: "v.Author.all", first: 3) {
                 totalCount
                 edges { cursor node { id state } }
                 pageInfo { hasNextPage hasPreviousPage startCursor endCursor }
