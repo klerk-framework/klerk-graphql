@@ -18,6 +18,7 @@ import graphql.Scalars
 import graphql.language.StringValue
 import graphql.schema.*
 import graphql.schema.idl.SchemaPrinter
+import kotlin.time.Instant
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
@@ -63,12 +64,12 @@ public fun GraphQLContext.applicationCall(): ApplicationCall? = get(ApplicationC
  */
 public fun <C : KlerkContext, V> Application.installKlerkGraphQL(
     klerk: Klerk<C, V>,
-    contextFactory: suspend (GraphQLContext) -> C
+    contextFactory: suspend (GraphQLContext) -> C,
 ) {
     @Suppress("UNCHECKED_CAST")
     val graphQL = buildGraphQL(
         klerk as Klerk<KlerkContext, Any>,
-        contextFactory as suspend (GraphQLContext) -> KlerkContext
+        contextFactory as suspend (GraphQLContext) -> KlerkContext,
     )
     attributes.put(graphQLKey, graphQL)
 }
@@ -113,7 +114,7 @@ public fun Route.klerkGraphQLRoutes() {
 private data class GraphQLRequest(
     val query: String,
     val operationName: String? = null,
-    val variables: Map<String, Any>? = null
+    val variables: Map<String, Any>? = null,
 )
 
 // ---------------------------------------------------------------------------
@@ -124,7 +125,7 @@ private const val KLERK_META = "Model"
 
 private fun <C : KlerkContext, V> buildGraphQL(
     klerk: Klerk<C, V>,
-    contextFactory: suspend (GraphQLContext) -> C
+    contextFactory: suspend (GraphQLContext) -> C,
 ): GraphQL {
     val scalarMap = mutableMapOf<String, GraphQLScalarType>()
     val enumTypeMap = mutableMapOf<String, GraphQLEnumType>()
@@ -143,7 +144,7 @@ private fun <C : KlerkContext, V> buildGraphQL(
     // Shared types
     val klerkCommandType = GraphQLObjectType.newObject().name("KlerkCommand")
         .field { it.name("name").type(GraphQLNonNull.nonNull(Scalars.GraphQLString)) }
-        .field { it.name("parameters").type(GraphQLList.list(GraphQLNonNull.nonNull(GraphQLTypeReference("KlerkParameter")))) }
+        .field { it.name("parameters").type(listOfNonNull(GraphQLTypeReference("KlerkParameter"))) }
         .build()
 
     val klerkParameterType = GraphQLObjectType.newObject().name("KlerkParameter")
@@ -165,16 +166,21 @@ private fun <C : KlerkContext, V> buildGraphQL(
         .field { it.name("value").type(Scalars.GraphQLString) }
         .build()
 
+    val instantType = GraphQLNonNull.nonNull(
+
+        getOrCreateScalar("Instant", Scalars.GraphQLString, scalarMap) { (it as Instant).toString() },
+
+    )
     val genericModelType = GraphQLObjectType.newObject().name(KLERK_META)
         .field { it.name("id").type(GraphQLNonNull.nonNull(Scalars.GraphQLString)) }
         .field { it.name("type").type(Scalars.GraphQLString) }
         .field { it.name("state").type(GraphQLNonNull.nonNull(Scalars.GraphQLString)) }
-        .field { it.name("createdAt").type(GraphQLNonNull.nonNull(getOrCreateScalar("Instant", Scalars.GraphQLString, scalarMap) { (it as kotlin.time.Instant).toString() })) }
-        .field { it.name("lastModifiedAt").type(GraphQLNonNull.nonNull(getOrCreateScalar("Instant", Scalars.GraphQLString, scalarMap) { (it as kotlin.time.Instant).toString() })) }
-        .field { it.name("lastPropsModifiedAt").type(GraphQLNonNull.nonNull(getOrCreateScalar("Instant", Scalars.GraphQLString, scalarMap) { (it as kotlin.time.Instant).toString() })) }
-        .field { it.name("lastStateTransitionAt").type(GraphQLNonNull.nonNull(getOrCreateScalar("Instant", Scalars.GraphQLString, scalarMap) { (it as kotlin.time.Instant).toString() })) }
-        .field { it.name("props").type(GraphQLList.list(GraphQLNonNull.nonNull(GraphQLTypeReference("KlerkField")))) }
-        .field { it.name("possibleEvents").type(GraphQLList.list(GraphQLNonNull.nonNull(GraphQLTypeReference("KlerkCommand")))) }
+        .field { it.name("createdAt").type(instantType) }
+        .field { it.name("lastModifiedAt").type(instantType) }
+        .field { it.name("lastPropsModifiedAt").type(instantType) }
+        .field { it.name("lastStateTransitionAt").type(instantType) }
+        .field { it.name("props").type(listOfNonNull(GraphQLTypeReference("KlerkField"))) }
+        .field { it.name("possibleEvents").type(listOfNonNull(GraphQLTypeReference("KlerkCommand"))) }
         .build()
 
     val pageInfoType = GraphQLObjectType.newObject().name("PageInfo")
@@ -228,7 +234,10 @@ private fun <C : KlerkContext, V> buildGraphQL(
         f.name("models")
             .type(GraphQLTypeReference("KlerkModelConnection"))
             .argument { it.name("viewId").type(GraphQLNonNull.nonNull(Scalars.GraphQLString)) }
-            .argument { it.name("where").type(Scalars.GraphQLString).description("JSON-encoded where filter, e.g. '{\"firstName\":{\"_eq\":\"Adam\"}}'" ) }
+            .argument {
+                it.name("where").type(Scalars.GraphQLString)
+                    .description("JSON-encoded where filter, e.g. '{\"firstName\":{\"_eq\":\"Adam\"}}'")
+            }
             .also { addConnectionArguments(it) }
             .dataFetcher { env -> runBlocking { modelsDataFetcher(klerk, contextFactory, env) } }
     }
@@ -266,7 +275,9 @@ private fun <C : KlerkContext, V> buildGraphQL(
                 .type(GraphQLTypeReference("${typeName}Connection"))
                 .argument { it.name("viewId").type(GraphQLNonNull.nonNull(Scalars.GraphQLString)) }
                 .argument { it.name("state").type(stringComparisonExpType).description("Filter by model state") }
-                .argument { it.name("createdAt").type(stringComparisonExpType).description("Filter by createdAt timestamp") }
+                .argument {
+                    it.name("createdAt").type(stringComparisonExpType).description("Filter by createdAt timestamp")
+                }
                 .argument { it.name("where").type(whereInputType).description("Filter on props") }
                 .also { addConnectionArguments(it) }
                 .dataFetcher { env -> runBlocking { typedModelsDataFetcher(klerk, contextFactory, kClass, env) } }
@@ -275,16 +286,18 @@ private fun <C : KlerkContext, V> buildGraphQL(
             GraphQLObjectType.newObject().name("${typeName}Edge")
                 .field { it.name("node").type(GraphQLTypeReference(modelTypeName)) }
                 .field { it.name("cursor").type(GraphQLNonNull.nonNull(Scalars.GraphQLString)) }
-                .build()
+                .build(),
         )
         connectionTypes.add(
             GraphQLObjectType.newObject().name("${typeName}Connection")
                 .field {
-                    it.name("edges").type(GraphQLList.list(GraphQLNonNull.nonNull(GraphQLTypeReference("${typeName}Edge"))))
+                    it.name("edges").type(listOfNonNull(GraphQLTypeReference("${typeName}Edge")))
                 }
                 .field { it.name("pageInfo").type(GraphQLNonNull.nonNull(GraphQLTypeReference("PageInfo"))) }
-                .field { it.name("totalCount").type(Scalars.GraphQLInt).description("The size of the whole collection.") }
-                .build()
+                .field {
+                    it.name("totalCount").type(Scalars.GraphQLInt).description("The size of the whole collection.")
+                }
+                .build(),
         )
     }
 
@@ -333,7 +346,11 @@ private fun <C : KlerkContext, V> buildGraphQL(
 // Per-model typed ObjectType builders
 // ---------------------------------------------------------------------------
 
-private fun buildPropsType(kClass: KClass<*>, scalarMap: MutableMap<String, GraphQLScalarType>, enumTypeMap: MutableMap<String, GraphQLEnumType>): GraphQLObjectType {
+private fun buildPropsType(
+    kClass: KClass<*>,
+    scalarMap: MutableMap<String, GraphQLScalarType>,
+    enumTypeMap: MutableMap<String, GraphQLEnumType>,
+): GraphQLObjectType {
     val typeName = "${kClass.simpleName!!}Props"
     val builder = GraphQLObjectType.newObject().name(typeName)
     for (field in ObjectSchema.of(kClass).fields) {
@@ -358,7 +375,7 @@ private fun buildModelObjectType(typeName: String, propsType: GraphQLObjectType)
         .field { it.name("lastPropsModifiedAt").type(GraphQLNonNull.nonNull(GraphQLTypeReference("Instant"))) }
         .field { it.name("lastStateTransitionAt").type(GraphQLNonNull.nonNull(GraphQLTypeReference("Instant"))) }
         .field { it.name("props").type(GraphQLNonNull.nonNull(propsType)) }
-        .field { it.name("possibleEvents").type(GraphQLList.list(GraphQLNonNull.nonNull(GraphQLTypeReference("KlerkCommand")))) }
+        .field { it.name("possibleEvents").type(listOfNonNull(GraphQLTypeReference("KlerkCommand"))) }
         .build()
 }
 
@@ -366,7 +383,11 @@ private fun buildModelObjectType(typeName: String, propsType: GraphQLObjectType)
 // Type resolution helpers
 // ---------------------------------------------------------------------------
 
-private fun resolveGraphQLType(field: SchemaField, scalarMap: MutableMap<String, GraphQLScalarType>, enumTypeMap: MutableMap<String, GraphQLEnumType>): GraphQLOutputType {
+private fun resolveGraphQLType(
+    field: SchemaField,
+    scalarMap: MutableMap<String, GraphQLScalarType>,
+    enumTypeMap: MutableMap<String, GraphQLEnumType>,
+): GraphQLOutputType {
     if (field.isCollection) return Scalars.GraphQLString
     return when (field.type) {
         PropertyType.Int, PropertyType.Short, PropertyType.Byte, PropertyType.UShort, PropertyType.UByte ->
@@ -385,7 +406,7 @@ private fun getOrCreateScalar(
     name: String,
     base: GraphQLScalarType,
     scalarMap: MutableMap<String, GraphQLScalarType>,
-    serialize: (Any) -> Any?
+    serialize: (Any) -> Any?,
 ): GraphQLScalarType {
     return scalarMap.getOrPut(name) {
         GraphQLScalarType.newScalar(base).name(name).coercing(object : Coercing<Any, Any> {
@@ -402,7 +423,9 @@ private fun getOrCreateEnumType(field: SchemaField, enumTypeMap: MutableMap<Stri
     val enumName = enumClass?.simpleName ?: field.valueClass.simpleName!!
     return enumTypeMap.getOrPut(enumName) {
         val builder = GraphQLEnumType.newEnum().name(enumName)
-        field.enumConstants.forEach { builder.value(it.name) }
+        for (enumConstant in field.enumConstants) {
+            builder.value(enumConstant.name)
+        }
         builder.build()
     }
 }
@@ -415,7 +438,7 @@ private fun getOrCreateEnumType(field: SchemaField, enumTypeMap: MutableMap<Stri
  * a sentinel would be worse than one rule for everything. The generic `KlerkField.value` still shows the mask; it is
  * a String on purpose, for display.
  */
-private fun serializeValue(value: Any?): Any? {
+internal fun serializeValue(value: Any?): Any? {
     if (value == null) return null
     return when (value) {
         // toString() rather than the value itself, since a container may override it to format the value.
@@ -494,7 +517,7 @@ private fun connectionOptions(env: DataFetchingEnvironment): QueryOptions {
         return QueryOptions(
             maxItems = last ?: DEFAULT_PAGE_SIZE,
             cursor = QueryListCursor.parse(before),
-            direction = PageDirection.BEFORE,
+            direction = PageDirection.Before,
             countTotal = true,
         )
     }
@@ -502,7 +525,7 @@ private fun connectionOptions(env: DataFetchingEnvironment): QueryOptions {
     return QueryOptions(
         maxItems = first ?: DEFAULT_PAGE_SIZE,
         cursor = after?.let { QueryListCursor.parse(it) },
-        direction = if (after == null) PageDirection.FROM else PageDirection.AFTER,
+        direction = if (after == null) PageDirection.From else PageDirection.After,
         countTotal = true,
     )
 }
@@ -530,7 +553,7 @@ private fun <T : Any> connection(result: QueryResponse<T>, nodes: List<Map<Strin
 private suspend fun <C : KlerkContext, V> modelsDataFetcher(
     klerk: Klerk<C, V>,
     contextFactory: suspend (GraphQLContext) -> C,
-    env: DataFetchingEnvironment
+    env: DataFetchingEnvironment,
 ): Map<String, Any?> {
     val context = contextFactory(env.graphQlContext)
     val viewId = env.getArgument<String>("viewId")!!
@@ -539,7 +562,7 @@ private suspend fun <C : KlerkContext, V> modelsDataFetcher(
         @Suppress("UNCHECKED_CAST")
         jackson.readValue(whereJson, Map::class.java) as Map<String, Any>
     } else null
-    val view = klerk.specification.view(ViewId.parse(viewId))
+    val view = klerk.specification.view(ViewID.parse(viewId))
     // The filter goes into the query, so `first: 10` really does return ten matching models when there are ten.
     val result = klerk.read(context) {
         view.query(connectionOptions(env)) { whereMap == null || matchesWhere(it.props, whereMap) }
@@ -553,7 +576,7 @@ private suspend fun <C : KlerkContext, V> modelsDataFetcher(
 private suspend fun <C : KlerkContext, V> modelDataFetcher(
     klerk: Klerk<C, V>,
     contextFactory: suspend (GraphQLContext) -> C,
-    env: DataFetchingEnvironment
+    env: DataFetchingEnvironment,
 ): Map<String, Any?>? {
     val context = contextFactory(env.graphQlContext)
     val id = env.getArgument<String>("id")!!
@@ -565,7 +588,7 @@ private suspend fun <C : KlerkContext, V> modelDataFetcher(
 private suspend fun <C : KlerkContext, V> voidCommandsDataFetcher(
     klerk: Klerk<C, V>,
     contextFactory: suspend (GraphQLContext) -> C,
-    env: DataFetchingEnvironment
+    env: DataFetchingEnvironment,
 ): List<Map<String, Any?>> {
     val context = contextFactory(env.graphQlContext)
     val type = env.getArgument<String>("type")
@@ -580,7 +603,7 @@ private suspend fun <C : KlerkContext, V> typedModelDataFetcher(
     klerk: Klerk<C, V>,
     contextFactory: suspend (GraphQLContext) -> C,
     kClass: KClass<*>,
-    env: DataFetchingEnvironment
+    env: DataFetchingEnvironment,
 ): Map<String, Any?>? {
     val context = contextFactory(env.graphQlContext)
     val id = env.getArgument<String>("id")!!
@@ -594,7 +617,7 @@ private suspend fun <C : KlerkContext, V> typedModelsDataFetcher(
     klerk: Klerk<C, V>,
     contextFactory: suspend (GraphQLContext) -> C,
     kClass: KClass<*>,
-    env: DataFetchingEnvironment
+    env: DataFetchingEnvironment,
 ): Map<String, Any?> {
     val context = contextFactory(env.graphQlContext)
     val viewId = env.getArgument<String>("viewId")!!
@@ -604,7 +627,7 @@ private suspend fun <C : KlerkContext, V> typedModelsDataFetcher(
     val stateFilter = env.getArgument<Map<String, Any>?>("state")
     @Suppress("UNCHECKED_CAST")
     val createdAtFilter = env.getArgument<Map<String, Any>?>("createdAt")
-    val view = klerk.specification.view(ViewId.parse(viewId))
+    val view = klerk.specification.view(ViewID.parse(viewId))
     // Every filter goes into the query, so a page is full whenever enough models match.
     val result = klerk.read(context) {
         view.query(connectionOptions(env)) { item ->
@@ -622,7 +645,7 @@ private suspend fun <C : KlerkContext, V> typedModelsDataFetcher(
 private fun <C : KlerkContext, V> typedModelMap(
     model: Model<out Any>,
     events: Set<Event<*, *>>,
-    klerk: Klerk<C, V>
+    klerk: Klerk<C, V>,
 ): Map<String, Any?> {
     val commands = events.map { commandToMap(it.id, klerk.specification.parametersSchema(it.id)) }
     return mapOf(
@@ -634,14 +657,14 @@ private fun <C : KlerkContext, V> typedModelMap(
         "lastPropsModifiedAt" to model.lastPropsUpdatedAt,
         "lastStateTransitionAt" to model.lastStateTransitionAt,
         "props" to model.props,
-        "possibleEvents" to commands
+        "possibleEvents" to commands,
     )
 }
 
 private fun <C : KlerkContext, V> genericModelMap(
     model: Model<out Any>,
     events: Set<Event<*, *>>,
-    klerk: Klerk<C, V>
+    klerk: Klerk<C, V>,
 ): Map<String, Any?> {
     val props = ObjectSchema.of(model.props::class).fields.map { field ->
         val value = field.get(model.props)
@@ -649,7 +672,7 @@ private fun <C : KlerkContext, V> genericModelMap(
             "name" to field.name,
             "type" to field.valueClass.simpleName,
             // KlerkField.value is a String, so a denied property can show the mask here rather than disappear.
-            "value" to if (isMasked(value)) value.toString() else serializeValue(value)
+            "value" to if (isMasked(value)) value.toString() else serializeValue(value),
         )
     }
     val commands = events.map { commandToMap(it.id, klerk.specification.parametersSchema(it.id)) }
@@ -662,131 +685,13 @@ private fun <C : KlerkContext, V> genericModelMap(
         "lastPropsModifiedAt" to model.lastPropsUpdatedAt,
         "lastStateTransitionAt" to model.lastStateTransitionAt,
         "props" to props,
-        "possibleEvents" to commands
+        "possibleEvents" to commands,
     )
-}
-
-/**
- * Builds a per-model WhereInput type with per-field comparison expression input types.
- * Each field gets a `<TypeName><FieldName>ComparisonExp` input type with operators:
- * `_eq`, `_neq`, `_gt`, `_lt`, `_gte`, `_lte`, `_like`, `_ilike`, `_in`, `_is_null`.
- * The WhereInput also supports `_and`, `_or`, `_not` for boolean composition.
- */
-internal fun buildWhereInputType(kClass: KClass<*>): GraphQLInputObjectType {
-    val typeName = kClass.simpleName!!
-    val whereTypeName = "${typeName}WhereInput"
-    val builder = GraphQLInputObjectType.newInputObject().name(whereTypeName)
-
-    for (prop in ObjectSchema.of(kClass).fields) {
-        val compExpName = "${typeName}${prop.name.replaceFirstChar { it.uppercase() }}ComparisonExp"
-        val compExp = GraphQLInputObjectType.newInputObject().name(compExpName)
-            .field { it.name("_eq").type(Scalars.GraphQLString) }
-            .field { it.name("_neq").type(Scalars.GraphQLString) }
-            .field { it.name("_gt").type(Scalars.GraphQLString) }
-            .field { it.name("_lt").type(Scalars.GraphQLString) }
-            .field { it.name("_gte").type(Scalars.GraphQLString) }
-            .field { it.name("_lte").type(Scalars.GraphQLString) }
-            .field { it.name("_like").type(Scalars.GraphQLString) }
-            .field { it.name("_ilike").type(Scalars.GraphQLString) }
-            .field { it.name("_in").type(GraphQLList.list(GraphQLNonNull.nonNull(Scalars.GraphQLString))) }
-            .field { it.name("_is_null").type(Scalars.GraphQLBoolean) }
-            .build()
-        builder.field { it.name(prop.name).type(compExp) }
-    }
-
-    // Boolean operators
-    builder.field { it.name("_and").type(GraphQLList.list(GraphQLTypeReference(whereTypeName))) }
-    builder.field { it.name("_or").type(GraphQLList.list(GraphQLTypeReference(whereTypeName))) }
-    builder.field { it.name("_not").type(GraphQLTypeReference(whereTypeName)) }
-
-    return builder.build()
-}
-
-/**
- * Evaluates a where map against a props object.
- * The map may contain field names (each mapping to a comparison-exp map) and/or
- * `_and`, `_or`, `_not` boolean operators.
- */
-@Suppress("UNCHECKED_CAST")
-internal fun matchesWhere(props: Any, where: Map<String, Any?>): Boolean {
-    for ((key, value) in where) {
-        when (key) {
-            "_and" -> {
-                val list = value as? List<Map<String, Any?>> ?: continue
-                if (!list.all { matchesWhere(props, it) }) return false
-            }
-            "_or" -> {
-                val list = value as? List<Map<String, Any?>> ?: continue
-                if (list.isNotEmpty() && !list.any { matchesWhere(props, it) }) return false
-            }
-            "_not" -> {
-                val sub = value as? Map<String, Any?> ?: continue
-                if (matchesWhere(props, sub)) return false
-            }
-            else -> {
-                // key is a field name
-                val compExp = value as? Map<String, Any?> ?: continue
-                val field = ObjectSchema.of(props::class).field(key) ?: return false
-                if (!matchesComparisonExp(field.get(props), compExp)) return false
-            }
-        }
-    }
-    return true
-}
-
-@Suppress("UNCHECKED_CAST")
-internal fun matchesComparisonExp(rawValue: Any?, compExp: Map<String, Any?>): Boolean {
-    for ((op, opValue) in compExp) {
-        when (op) {
-            "_is_null" -> {
-                val expectNull = opValue as? Boolean ?: continue
-                val isNull = rawValue == null
-                if (expectNull != isNull) return false
-            }
-            "_in" -> {
-                val list = opValue as? List<*> ?: continue
-                val strValue = serializeValue(rawValue)?.toString()
-                if (strValue !in list.map { it?.toString() }) return false
-            }
-            else -> {
-                val strValue = serializeValue(rawValue)?.toString() ?: return false
-                val cmpValue = opValue?.toString() ?: return false
-                val matches = when (op) {
-                    "_eq" -> strValue == cmpValue
-                    "_neq" -> strValue != cmpValue
-                    "_gt" -> strValue > cmpValue
-                    "_lt" -> strValue < cmpValue
-                    "_gte" -> strValue >= cmpValue
-                    "_lte" -> strValue <= cmpValue
-                    "_like" -> likeToRegex(cmpValue).matches(strValue)
-                    "_ilike" -> likeToRegex(cmpValue, ignoreCase = true).matches(strValue)
-                    else -> true
-                }
-                if (!matches) return false
-            }
-        }
-    }
-    return true
-}
-
-private fun likeToRegex(pattern: String, ignoreCase: Boolean = false): Regex {
-    val regexStr = buildString {
-        append("^")
-        for (ch in pattern) {
-            when (ch) {
-                '%' -> append(".*")
-                '_' -> append(".")
-                else -> append(Regex.escape(ch.toString()))
-            }
-        }
-        append("$")
-    }
-    return if (ignoreCase) Regex(regexStr, RegexOption.IGNORE_CASE) else Regex(regexStr)
 }
 
 private fun commandToMap(
     ref: EventReference,
-    parameters: ObjectSchema<*>?
+    parameters: ObjectSchema<*>?,
 ): Map<String, Any?> {
     val params = parameters?.fields?.map { p ->
         mapOf(
@@ -794,7 +699,7 @@ private fun commandToMap(
             "type" to (p.type?.name ?: "[?]"),
             "ofType" to p.referencedModel?.qualifiedName,
             "nullable" to p.isNullable,
-            "required" to p.isRequired
+            "required" to p.isRequired,
         )
     } ?: emptyList()
     return mapOf("name" to ref.toString(), "parameters" to params)
@@ -803,7 +708,7 @@ private fun commandToMap(
 private suspend fun <C : KlerkContext, V> createCommandDataFetcher(
     klerk: Klerk<C, V>,
     contextFactory: suspend (GraphQLContext) -> C,
-    env: DataFetchingEnvironment
+    env: DataFetchingEnvironment,
 ): Map<String, Any?> {
     val context = contextFactory(env.graphQlContext)
     val event = env.getArgument<String>("event")!!
@@ -819,10 +724,10 @@ private suspend fun <C : KlerkContext, V> createCommandDataFetcher(
         Command.dynamic(
             eventObj,
             if (modelArg == null) null else ModelID(modelArg.toInt()),
-            paramsObject
+            paramsObject,
         ),
         context,
-        ProcessingOptions(dryRun = dryRun)
+        ProcessingOptions(dryRun = dryRun),
     )
 
     return when (result) {
@@ -830,7 +735,7 @@ private suspend fun <C : KlerkContext, V> createCommandDataFetcher(
             "createdModels" to result.createdModels.map { it.toString() },
             "modifiedModels" to result.updatedModels.map { it.toString() },
             "deletedModels" to result.deletedModels.map { it.toString() },
-            "generatedJobs" to result.jobs.map { it.value.toString() }
+            "generatedJobs" to result.jobs.map { it.value.toString() },
         )
         is CommandResult.Failure -> {
             val message = requireNotNull(result.problems.first()).endUserTranslatedMessage
@@ -839,18 +744,26 @@ private suspend fun <C : KlerkContext, V> createCommandDataFetcher(
     }
 }
 
+/**
+ * Serves GraphiQL at [endpoint], talking to the GraphQL API at [graphQLEndpoint] and subscriptions at
+ * [subscriptionsEndpoint].
+ */
 public fun Route.graphiQLRoute(
     endpoint: String = "graphiql",
     graphQLEndpoint: String = "graphql",
     subscriptionsEndpoint: String = "subscriptions",
 ): Route {
     val contextPath = this.application.rootPath
-    val graphiQL = GraphQL::class.java.classLoader.getResourceAsStream("graphql-graphiql.html")?.bufferedReader()?.use { reader ->
+    fun withContextPath(path: String) = if (contextPath.isBlank()) path else "$contextPath/$path"
+    val resource = GraphQL::class.java.classLoader.getResourceAsStream("graphql-graphiql.html")
+    val graphiQL = resource?.bufferedReader()?.use { reader ->
         reader.readText()
-            .replace("\${graphQLEndpoint}", if (contextPath.isBlank()) graphQLEndpoint else "$contextPath/$graphQLEndpoint")
-            .replace("\${subscriptionsEndpoint}", if (contextPath.isBlank()) subscriptionsEndpoint else "$contextPath/$subscriptionsEndpoint")
+            .replace("\${graphQLEndpoint}", withContextPath(graphQLEndpoint))
+            .replace("\${subscriptionsEndpoint}", withContextPath(subscriptionsEndpoint))
     } ?: throw IllegalStateException("Unable to load GraphiQL")
     return get(endpoint) {
         call.respondText(graphiQL, ContentType.Text.Html)
     }
 }
+
+private fun listOfNonNull(type: GraphQLType): GraphQLList = GraphQLList.list(GraphQLNonNull.nonNull(type))

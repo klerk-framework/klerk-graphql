@@ -35,7 +35,7 @@ fun main() {
                 klerk,
                 createAuthorJKRowling(klerk),
                 listOf(createBookHarryPotter1(klerk, createAuthorJKRowling(klerk))),
-                setOf(createAuthorJKRowling(klerk))
+                setOf(createAuthorJKRowling(klerk)),
             )
             createShop(klerk)
         }
@@ -75,8 +75,8 @@ private suspend fun createShop(klerk: Klerk<Context, MyViews>) {
     klerk.handle(Command(
         CreateShop,
         CreateShopParams(
-            faxNumber = null
-        )
+            faxNumber = null,
+        ),
     
     ),
         Context.system(),

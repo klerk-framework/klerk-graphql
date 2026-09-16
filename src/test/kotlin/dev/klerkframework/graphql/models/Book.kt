@@ -45,7 +45,10 @@ enum class BookStates {
     Published,
 }
 
-fun bookStateMachine(allAuthors: ModelView<Author, Context>, collections: MyViews): StateMachine<Book, BookStates, Context, MyViews> =
+fun bookStateMachine(
+    allAuthors: ModelView<Author, Context>,
+    collections: MyViews,
+): StateMachine<Book, BookStates, Context, MyViews> =
     stateMachine {
 
         event(CreateBook) {
@@ -101,7 +104,7 @@ data class CreateBookParams(
     val coAuthors: Set<ModelID<Author>> = emptySet(),
     val previousBooksInSameSeries: List<ModelID<Book>> = emptyList(),
     val tags: Set<BookTag> = emptySet(),
-    val averageScore: AverageScore
+    val averageScore: AverageScore,
 )
 
 data class AdvancedParams(
@@ -129,6 +132,6 @@ fun newBook(args: VoidEventArgs<Book, CreateBookParams, Context, MyViews>): Book
         writtenAt = BookWrittenAt(Clock.System.now()),
         readingTime = ReadingTime(23.hours + 11.minutes + 34.seconds),
         publishedAt = null,
-        releasePartyPosition = ReleasePartyPosition(GeoPosition(latitude = 1.234, longitude = 3.456))
+        releasePartyPosition = ReleasePartyPosition(GeoPosition(latitude = 1.234, longitude = 3.456)),
     )
 }

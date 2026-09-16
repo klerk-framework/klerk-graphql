@@ -199,7 +199,9 @@ fun onEnterAmateurStateAction(args: LifecycleArgs<Author, Context, MyViews>) {
 }
 
 
-fun notifyBookStores(args: InstanceEventArgs<Author, ChangeNameParams, Context, MyViews>): List<DeclaredJob<Context, MyViews>> {
+fun notifyBookStores(
+    args: InstanceEventArgs<Author, ChangeNameParams, Context, MyViews>,
+): List<DeclaredJob<Context, MyViews>> {
     return listOf(MyOtherJob.declare(""))
 }
 
@@ -210,13 +212,16 @@ data class CreateAuthorParams(
     val age: EvenIntContainer = EvenIntContainer(68),
     //  val address: Address,
     val secretToken: SecretPasscode,
-    val favouriteColleague: ModelID<Author>? = null
+    val favouriteColleague: ModelID<Author>? = null,
 ) : Validatable {
 
-    override fun validators(): Set<() -> PropertyCollectionValidity> = setOf(::augustStrindbergCannotHaveCertainPhoneNumber)
+    override fun validators(): Set<() -> PropertyCollectionValidity> =
+
+        setOf(::augustStrindbergCannotHaveCertainPhoneNumber)
 
     private fun augustStrindbergCannotHaveCertainPhoneNumber(): PropertyCollectionValidity {
-        return if (firstName.value == "August" && lastName.value == "Strindberg" && phone.value == "123456") Invalid() else Valid
+        val isAugust = firstName.value == "August" && lastName.value == "Strindberg"
+        return if (isAugust && phone.value == "123456") Invalid() else Valid
     }
 }
 
@@ -242,17 +247,18 @@ object ChangeName : InstanceEventWithParameters<Author, ChangeNameParams>(Extern
 fun changeNameOfAuthor(args: InstanceEventArgs<Author, ChangeNameParams, Context, MyViews>): Author {
     return args.model.props.copy(
         firstName = args.command.params.updatedFirstName,
-        lastName = args.command.params.updatedLastName
+        lastName = args.command.params.updatedLastName,
     )
 }
 
 object CreateAuthorTheAdvancedWay : VoidEventWithParameters<Author, AdvancedParams>(External)
 
 fun newAuthorFromAdvancedParams(args: VoidEventArgs<Author, AdvancedParams, Context, MyViews>): Author {
-    println("Doing something with ${args.command.params.titles.joinToString { it.title.value }} and ${args.command.params.averageScore.value}")
+    val params = args.command.params
+    println("Doing something with ${params.titles.joinToString { it.title.value }} and ${params.averageScore.value}")
     return Author(
         firstName = FirstName("Advanced"),
         lastName = LastName("Author"),
-        address = Address(Street("kjh"))
+        address = Address(Street("kjh")),
     )
 }
