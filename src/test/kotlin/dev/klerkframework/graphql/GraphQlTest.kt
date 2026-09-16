@@ -51,7 +51,7 @@ fun main() {
         Runtime.getRuntime().addShutdownHook(Thread {
             println("Shutting down")
             embeddedServer.stop()
-            klerk.meta.stop()
+            runBlocking { klerk.meta.stop() }
             println("Shutdown complete")
         })
 

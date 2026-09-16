@@ -9,7 +9,6 @@ import dev.klerkframework.klerk.view.QueryOptions
 import dev.klerkframework.klerk.view.QueryResponse
 import dev.klerkframework.klerk.view.query
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.datatypes.*
 import graphql.ExecutionInput
@@ -460,7 +459,7 @@ private fun isMasked(value: Any?): Boolean = value is DataContainer<*> && value.
 // ---------------------------------------------------------------------------
 
 private fun <C : KlerkContext, V> collectionsDataFetcher(klerk: Klerk<C, V>): List<Map<String, Any>> {
-    return klerk.specification.getViews().map { (type, collection) ->
+    return klerk.specification.registeredViews.map { (type, collection) ->
         mapOf("id" to collection.id.toString(), "type" to type.simpleName!!)
     }
 }
@@ -540,13 +539,13 @@ private suspend fun <C : KlerkContext, V> modelsDataFetcher(
         @Suppress("UNCHECKED_CAST")
         jackson.readValue(whereJson, Map::class.java) as Map<String, Any>
     } else null
-    val view = klerk.specification.getView(ViewId.parse(viewId))
+    val view = klerk.specification.view(ViewId.parse(viewId))
     // The filter goes into the query, so `first: 10` really does return ten matching models when there are ten.
     val result = klerk.read(context) {
         view.query(connectionOptions(env)) { whereMap == null || matchesWhere(it.props, whereMap) }
     }
     val nodes = result.items.map { item ->
-        genericModelMap(item, klerk.read(context) { getPossibleEvents(item.id) }, klerk)
+        genericModelMap(item, klerk.read(context) { possibleEvents(item.id) }, klerk)
     }
     return connection(result, nodes)
 }
@@ -559,7 +558,7 @@ private suspend fun <C : KlerkContext, V> modelDataFetcher(
     val context = contextFactory(env.graphQlContext)
     val id = env.getArgument<String>("id")!!
     val model = klerk.read(context) { getOrNull(ModelID(id.toInt())) } ?: return null
-    val events = klerk.read(context) { getPossibleEvents(model.id) }
+    val events = klerk.read(context) { possibleEvents(model.id) }
     return genericModelMap(model, events, klerk)
 }
 
@@ -573,8 +572,8 @@ private suspend fun <C : KlerkContext, V> voidCommandsDataFetcher(
     val managed = klerk.specification.managedModels.single { it.kClass.simpleName == type }
     // Through a read block, so the validation rules get a say -- an event the actor could not actually submit is not
     // offered as a command.
-    return klerk.read(context) { getPossibleVoidEvents(managed.kClass) }
-        .map { commandToMap(it, klerk.specification.parametersSchema(it)) }
+    return klerk.read(context) { possibleVoidEvents(managed.kClass) }
+        .map { commandToMap(it.id, klerk.specification.parametersSchema(it.id)) }
 }
 
 private suspend fun <C : KlerkContext, V> typedModelDataFetcher(
@@ -587,7 +586,7 @@ private suspend fun <C : KlerkContext, V> typedModelDataFetcher(
     val id = env.getArgument<String>("id")!!
     val model = klerk.read(context) { getOrNull(ModelID(id.toInt())) } ?: return null
     if (model.props::class != kClass) return null
-    val events = klerk.read(context) { getPossibleEvents(model.id) }
+    val events = klerk.read(context) { possibleEvents(model.id) }
     return typedModelMap(model, events, klerk)
 }
 
@@ -605,7 +604,7 @@ private suspend fun <C : KlerkContext, V> typedModelsDataFetcher(
     val stateFilter = env.getArgument<Map<String, Any>?>("state")
     @Suppress("UNCHECKED_CAST")
     val createdAtFilter = env.getArgument<Map<String, Any>?>("createdAt")
-    val view = klerk.specification.getView(ViewId.parse(viewId))
+    val view = klerk.specification.view(ViewId.parse(viewId))
     // Every filter goes into the query, so a page is full whenever enough models match.
     val result = klerk.read(context) {
         view.query(connectionOptions(env)) { item ->
@@ -615,17 +614,17 @@ private suspend fun <C : KlerkContext, V> typedModelsDataFetcher(
         }
     }
     val nodes = result.items.map { item ->
-        typedModelMap(item, klerk.read(context) { getPossibleEvents(item.id) }, klerk)
+        typedModelMap(item, klerk.read(context) { possibleEvents(item.id) }, klerk)
     }
     return connection(result, nodes)
 }
 
 private fun <C : KlerkContext, V> typedModelMap(
     model: Model<out Any>,
-    eventReferences: Set<EventReference>,
+    events: Set<Event<*, *>>,
     klerk: Klerk<C, V>
 ): Map<String, Any?> {
-    val commands = eventReferences.map { commandToMap(it, klerk.specification.parametersSchema(it)) }
+    val commands = events.map { commandToMap(it.id, klerk.specification.parametersSchema(it.id)) }
     return mapOf(
         "id" to model.id.toString(),
         "type" to (model.props::class.simpleName ?: ""),
@@ -641,7 +640,7 @@ private fun <C : KlerkContext, V> typedModelMap(
 
 private fun <C : KlerkContext, V> genericModelMap(
     model: Model<out Any>,
-    eventReferences: Set<EventReference>,
+    events: Set<Event<*, *>>,
     klerk: Klerk<C, V>
 ): Map<String, Any?> {
     val props = ObjectSchema.of(model.props::class).fields.map { field ->
@@ -653,7 +652,7 @@ private fun <C : KlerkContext, V> genericModelMap(
             "value" to if (isMasked(value)) value.toString() else serializeValue(value)
         )
     }
-    val commands = eventReferences.map { commandToMap(it, klerk.specification.parametersSchema(it)) }
+    val commands = events.map { commandToMap(it.id, klerk.specification.parametersSchema(it.id)) }
     return mapOf(
         "id" to model.id.toString(),
         "type" to model.props::class.simpleName,
@@ -812,7 +811,7 @@ private suspend fun <C : KlerkContext, V> createCommandDataFetcher(
     val paramsJson = env.getArgument<String>("paramsJson")!!
     val dryRun = env.getArgument<Boolean>("dryRun")!!
 
-    val eventObj = klerk.specification.getEvent(EventReference.parse(event))
+    val eventObj = klerk.specification.event(EventReference.parse(event))
     val parameterInfo = klerk.specification.parametersSchema(eventObj.id)
     val paramsObject = parameterInfo?.fromJson(paramsJson)
 
@@ -823,7 +822,7 @@ private suspend fun <C : KlerkContext, V> createCommandDataFetcher(
             paramsObject
         ),
         context,
-        ProcessingOptions(CommandToken.simple(), dryRun = dryRun)
+        ProcessingOptions(dryRun = dryRun)
     )
 
     return when (result) {

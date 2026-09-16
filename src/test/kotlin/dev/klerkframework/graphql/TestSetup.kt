@@ -1,6 +1,7 @@
 package dev.klerkframework.graphql
 
 import dev.klerkframework.klerk.view.asSequenceOrThrow
+import dev.klerkframework.klerk.validation.Valid
 import dev.klerkframework.graphql.AuthorStates.*
 import dev.klerkframework.graphql.models.Author
 import dev.klerkframework.graphql.models.Book
@@ -34,8 +35,8 @@ import dev.klerkframework.klerk.NegativeAuthorization
 import dev.klerkframework.klerk.NegativeAuthorization.Deny
 import dev.klerkframework.klerk.NegativeAuthorization.Pass
 import dev.klerkframework.klerk.PositiveAuthorization
-import dev.klerkframework.klerk.PropertyCollectionValidity
-import dev.klerkframework.klerk.PropertyCollectionValidity.*
+import dev.klerkframework.klerk.validation.PropertyCollectionValidity
+import dev.klerkframework.klerk.validation.PropertyCollectionValidity.*
 import dev.klerkframework.klerk.Specification
 import dev.klerkframework.klerk.SpecificationBuilder
 import dev.klerkframework.klerk.SystemIdentity
@@ -393,7 +394,7 @@ class EvenIntContainer(value: Int) : IntContainer(value) {
 
     fun mustBeEven(value: Int, translation: Translation): PropertyValidity {
         if (value % 2 == 0) {
-            return PropertyValidity.Valid
+            return Valid
         }
         return PropertyValidity.Invalid("Must be even")
     }
@@ -420,7 +421,7 @@ class BookTitle(value: String) : StringContainer(value) {
     override val validators = setOf(::`title must be catchy`)
 
     private fun `title must be catchy`(title: String, translation: Translation): PropertyValidity {
-        return PropertyValidity.Valid
+        return Valid
     }
 }
 

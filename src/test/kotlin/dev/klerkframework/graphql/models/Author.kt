@@ -32,9 +32,9 @@ import dev.klerkframework.klerk.EventVisibility.External
 import dev.klerkframework.klerk.InstanceEventNoParameters
 import dev.klerkframework.klerk.InstanceEventWithParameters
 import dev.klerkframework.klerk.ModelID
-import dev.klerkframework.klerk.PropertyCollectionValidity
-import dev.klerkframework.klerk.PropertyCollectionValidity.Invalid
-import dev.klerkframework.klerk.PropertyCollectionValidity.Valid
+import dev.klerkframework.klerk.validation.PropertyCollectionValidity
+import dev.klerkframework.klerk.validation.PropertyCollectionValidity.Invalid
+import dev.klerkframework.klerk.validation.Valid
 import dev.klerkframework.klerk.Validatable
 import dev.klerkframework.klerk.VoidEventWithParameters
 import dev.klerkframework.klerk.job.DeclaredJob
@@ -170,7 +170,7 @@ fun sayHello(args: LifecycleArgs<Author, Context, MyViews>) {
 }
 
 fun later(args: LifecycleArgs<Author, Context, MyViews>): Instant {
-    return args.time.plus(30.seconds)
+    return args.context.time.plus(30.seconds)
 }
 
 fun hasTalent(args: LifecycleArgs<Author, Context, MyViews>): Boolean = true
