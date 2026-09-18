@@ -9,6 +9,7 @@ plugins {
     kotlin("jvm") version "2.4.10"
     `java-library`
     `maven-publish`
+    id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
 }
 group = "dev.klerkframework"
 version = "1.0.0-alpha.2-SNAPSHOT"
@@ -20,7 +21,7 @@ dependencies {
     implementation("io.ktor:ktor-server-content-negotiation-jvm:$ktorVersion")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:$jacksonVersion")
     implementation("io.github.microutils:kotlin-logging-jvm:$kotlinLoggingVersion")
-    testImplementation("org.slf4j:slf4j-simple:${slf4jVersion}")
+    testImplementation("org.slf4j:slf4j-simple:$slf4jVersion")
     testImplementation("io.ktor:ktor-server-test-host-jvm:$ktorVersion")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit")
     testImplementation("org.jetbrains.kotlinx:kotlinx-datetime:0.8.0-rc02")

@@ -9,16 +9,16 @@ import dev.klerkframework.graphql.MyViews
 import dev.klerkframework.graphql.Quantity
 import dev.klerkframework.graphql.ReadingTime
 import dev.klerkframework.graphql.ReleasePartyPosition
-import dev.klerkframework.klerk.InstanceEventArgs
-import dev.klerkframework.klerk.VoidEventArgs
 import dev.klerkframework.klerk.EventVisibility.External
+import dev.klerkframework.klerk.InstanceEventArgs
 import dev.klerkframework.klerk.InstanceEventNoParameters
 import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.VoidEventArgs
 import dev.klerkframework.klerk.VoidEventWithParameters
-import dev.klerkframework.klerk.view.ModelView
 import dev.klerkframework.klerk.datatypes.GeoPosition
 import dev.klerkframework.klerk.statemachine.StateMachine
 import dev.klerkframework.klerk.statemachine.stateMachine
+import dev.klerkframework.klerk.view.ModelView
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
@@ -48,49 +48,44 @@ enum class BookStates {
 fun bookStateMachine(
     allAuthors: ModelView<Author, Context>,
     collections: MyViews,
-): StateMachine<Book, BookStates, Context, MyViews> =
-    stateMachine {
-
-        event(CreateBook) {
-            validReferences(CreateBookParams::author, collections.authors.all)
-            validReferences(CreateBookParams::coAuthors, collections.authors.all)
-            validReferences(CreateBookParams::previousBooksInSameSeries, collections.books.all)
-        }
-
-        event(PublishBook) {}
-
-        event(DeleteBook) {}
-
-        voidState {
-            onEvent(CreateBook) {
-                createModel(BookStates.Draft, ::newBook)
-            }
-        }
-
-        state(BookStates.Draft) {
-            onEnter {
-                //action(`Send email to editors`)
-            }
-
-            onEvent(PublishBook) {
-                update(::setPublishTime)
-                transitionTo(BookStates.Published)
-            }
-
-            onEvent(DeleteBook) {
-                delete()
-            }
-
-        }
-
-        state(BookStates.Published) {
-
-            onEvent(DeleteBook) {
-                delete()
-            }
-        }
-
+): StateMachine<Book, BookStates, Context, MyViews> = stateMachine {
+    event(CreateBook) {
+        validReferences(CreateBookParams::author, collections.authors.all)
+        validReferences(CreateBookParams::coAuthors, collections.authors.all)
+        validReferences(CreateBookParams::previousBooksInSameSeries, collections.books.all)
     }
+
+    event(PublishBook) {}
+
+    event(DeleteBook) {}
+
+    voidState {
+        onEvent(CreateBook) {
+            createModel(BookStates.Draft, ::newBook)
+        }
+    }
+
+    state(BookStates.Draft) {
+        onEnter {
+            // action(`Send email to editors`)
+        }
+
+        onEvent(PublishBook) {
+            update(::setPublishTime)
+            transitionTo(BookStates.Published)
+        }
+
+        onEvent(DeleteBook) {
+            delete()
+        }
+    }
+
+    state(BookStates.Published) {
+        onEvent(DeleteBook) {
+            delete()
+        }
+    }
+}
 
 object CreateBook : VoidEventWithParameters<Book, CreateBookParams>(External)
 
@@ -107,17 +102,12 @@ data class CreateBookParams(
     val averageScore: AverageScore,
 )
 
-data class AdvancedParams(
-    val titles: List<SimpleParamsPart>,
-    val averageScore: AverageScore,
-)
+data class AdvancedParams(val titles: List<SimpleParamsPart>, val averageScore: AverageScore)
 
 data class SimpleParamsPart(val title: BookTitle)
 
-fun setPublishTime(args: InstanceEventArgs<Book, Nothing?, Context, MyViews>): Book {
-    return args.model.props.copy(publishedAt = BookWrittenAt(args.context.time))
-}
-
+fun setPublishTime(args: InstanceEventArgs<Book, Nothing?, Context, MyViews>): Book =
+    args.model.props.copy(publishedAt = BookWrittenAt(args.context.time))
 
 fun newBook(args: VoidEventArgs<Book, CreateBookParams, Context, MyViews>): Book {
     val params = args.command.params

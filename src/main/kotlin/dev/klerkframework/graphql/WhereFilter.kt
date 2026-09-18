@@ -1,16 +1,17 @@
 package dev.klerkframework.graphql
 
-import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.datatypes.*
+import dev.klerkframework.klerk.misc.ObjectSchema
 import graphql.Scalars
-import graphql.schema.*
+import graphql.schema.GraphQLInputObjectType
+import graphql.schema.GraphQLList
+import graphql.schema.GraphQLNonNull
+import graphql.schema.GraphQLTypeReference
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.util.*
-import dev.klerkframework.klerk.misc.ObjectSchema
 import kotlin.reflect.KClass
 
 /**

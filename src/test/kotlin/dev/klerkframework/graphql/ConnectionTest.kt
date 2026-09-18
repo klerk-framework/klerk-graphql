@@ -6,10 +6,8 @@ import dev.klerkframework.graphql.models.CreateAuthor
 import dev.klerkframework.graphql.models.CreateAuthorParams
 import dev.klerkframework.klerk.Klerk
 import dev.klerkframework.klerk.ModelID
-import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.CommandToken
-import dev.klerkframework.klerk.command.ProcessingOptions
+import dev.klerkframework.klerk.view.ModelViews
 import graphql.GraphQLContext
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
@@ -68,11 +66,10 @@ class ConnectionTest {
         return (connection as Map<*, *>)["edges"] as List<Map<*, *>>
     }
 
-    private fun namesOf(connection: Any?): List<String> =
-        edgesOf(connection).map { edge ->
-            val node = edge["node"] as Map<*, *>
-            (node["props"] as Map<*, *>)["lastName"] as String
-        }
+    private fun namesOf(connection: Any?): List<String> = edgesOf(connection).map { edge ->
+        val node = edge["node"] as Map<*, *>
+        (node["props"] as Map<*, *>)["lastName"] as String
+    }
 
     private fun pageInfo(connection: Any?): Map<*, *> = (connection as Map<*, *>)["pageInfo"] as Map<*, *>
 

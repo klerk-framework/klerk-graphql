@@ -2,16 +2,13 @@ package dev.klerkframework.graphql
 
 import dev.klerkframework.graphql.models.CreateShop
 import dev.klerkframework.graphql.models.CreateShopParams
-import dev.klerkframework.graphql.models.FaxNumber
 import dev.klerkframework.klerk.Klerk
-import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.CommandToken
-import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.read.ModelModification.Created
 import dev.klerkframework.klerk.read.ModelModification.Deleted
 import dev.klerkframework.klerk.read.ModelModification.PropsUpdated
 import dev.klerkframework.klerk.read.ModelModification.Transitioned
+import dev.klerkframework.klerk.view.ModelViews
 import graphql.GraphQLContext
 import io.ktor.server.netty.Netty
 import io.ktor.server.routing.routing
@@ -19,7 +16,6 @@ import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
 
 fun main() {
-
     val log = KotlinLogging.logger {}
     log.info { "Starting" }
     val bc = BookCollections()
@@ -48,12 +44,14 @@ fun main() {
             }
         }
 
-        Runtime.getRuntime().addShutdownHook(Thread {
-            println("Shutting down")
-            embeddedServer.stop()
-            runBlocking { klerk.meta.stop() }
-            println("Shutdown complete")
-        })
+        Runtime.getRuntime().addShutdownHook(
+            Thread {
+                println("Shutting down")
+                embeddedServer.stop()
+                runBlocking { klerk.meta.stop() }
+                println("Shutdown complete")
+            },
+        )
 
         embeddedServer.start(wait = false)
 
@@ -66,19 +64,19 @@ fun main() {
             }
         }
     }
-
 }
 
 private fun contextFactory(graphQlContext: GraphQLContext) = Context.unauthenticated()
 
 private suspend fun createShop(klerk: Klerk<Context, MyViews>) {
-    klerk.handle(Command(
-        CreateShop,
-        CreateShopParams(
-            faxNumber = null,
+    klerk.handle(
+        Command(
+            CreateShop,
+            CreateShopParams(
+                faxNumber = null,
+            ),
+
         ),
-    
-    ),
         Context.system(),
     )
 }

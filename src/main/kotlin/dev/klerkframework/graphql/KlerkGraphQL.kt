@@ -2,23 +2,51 @@ package dev.klerkframework.graphql
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.CommandResult
+import dev.klerkframework.klerk.Event
+import dev.klerkframework.klerk.EventReference
+import dev.klerkframework.klerk.Klerk
+import dev.klerkframework.klerk.KlerkContext
+import dev.klerkframework.klerk.Model
+import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.ViewID
+import dev.klerkframework.klerk.command.Command
+import dev.klerkframework.klerk.command.ProcessingOptions
+import dev.klerkframework.klerk.datatypes.BooleanContainer
+import dev.klerkframework.klerk.datatypes.DataContainer
+import dev.klerkframework.klerk.datatypes.DurationContainer
+import dev.klerkframework.klerk.datatypes.EnumContainer
+import dev.klerkframework.klerk.datatypes.GeoPositionContainer
+import dev.klerkframework.klerk.datatypes.InstantContainer
+import dev.klerkframework.klerk.datatypes.NumberContainer
+import dev.klerkframework.klerk.datatypes.StringContainer
+import dev.klerkframework.klerk.misc.ObjectSchema
+import dev.klerkframework.klerk.misc.PropertyType
+import dev.klerkframework.klerk.misc.SchemaField
 import dev.klerkframework.klerk.view.PageDirection
 import dev.klerkframework.klerk.view.QueryListCursor
 import dev.klerkframework.klerk.view.QueryOptions
 import dev.klerkframework.klerk.view.QueryResponse
 import dev.klerkframework.klerk.view.query
-import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.ProcessingOptions
-import dev.klerkframework.klerk.datatypes.*
 import graphql.ExecutionInput
 import graphql.GraphQL
 import graphql.GraphQLContext
 import graphql.Scalars
 import graphql.language.StringValue
-import graphql.schema.*
+import graphql.schema.Coercing
+import graphql.schema.DataFetchingEnvironment
+import graphql.schema.GraphQLEnumType
+import graphql.schema.GraphQLFieldDefinition
+import graphql.schema.GraphQLInputObjectType
+import graphql.schema.GraphQLList
+import graphql.schema.GraphQLNonNull
+import graphql.schema.GraphQLObjectType
+import graphql.schema.GraphQLOutputType
+import graphql.schema.GraphQLScalarType
+import graphql.schema.GraphQLSchema
+import graphql.schema.GraphQLType
+import graphql.schema.GraphQLTypeReference
 import graphql.schema.idl.SchemaPrinter
-import kotlin.time.Instant
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
@@ -26,10 +54,8 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.util.*
 import kotlinx.coroutines.runBlocking
-import dev.klerkframework.klerk.misc.ObjectSchema
-import dev.klerkframework.klerk.misc.PropertyType
-import dev.klerkframework.klerk.misc.SchemaField
 import kotlin.reflect.KClass
+import kotlin.time.Instant
 
 private val jackson = ObjectMapper().registerKotlinModule()
 private val graphQLKey = AttributeKey<GraphQL>("KlerkGraphQL")
@@ -407,14 +433,12 @@ private fun getOrCreateScalar(
     base: GraphQLScalarType,
     scalarMap: MutableMap<String, GraphQLScalarType>,
     serialize: (Any) -> Any?,
-): GraphQLScalarType {
-    return scalarMap.getOrPut(name) {
-        GraphQLScalarType.newScalar(base).name(name).coercing(object : Coercing<Any, Any> {
-            override fun serialize(dataFetcherResult: Any): Any? = serialize(dataFetcherResult)
-            override fun parseValue(input: Any): Any = input
-            override fun parseLiteral(input: Any): Any = (input as? StringValue)?.value ?: input
-        }).build()
-    }
+): GraphQLScalarType = scalarMap.getOrPut(name) {
+    GraphQLScalarType.newScalar(base).name(name).coercing(object : Coercing<Any, Any> {
+        override fun serialize(dataFetcherResult: Any): Any? = serialize(dataFetcherResult)
+        override fun parseValue(input: Any): Any = input
+        override fun parseLiteral(input: Any): Any = (input as? StringValue)?.value ?: input
+    }).build()
 }
 
 private fun getOrCreateEnumType(field: SchemaField, enumTypeMap: MutableMap<String, GraphQLEnumType>): GraphQLEnumType {
@@ -481,11 +505,10 @@ private fun isMasked(value: Any?): Boolean = value is DataContainer<*> && value.
 // Data fetchers
 // ---------------------------------------------------------------------------
 
-private fun <C : KlerkContext, V> collectionsDataFetcher(klerk: Klerk<C, V>): List<Map<String, Any>> {
-    return klerk.specification.registeredViews.map { (type, collection) ->
+private fun <C : KlerkContext, V> collectionsDataFetcher(klerk: Klerk<C, V>): List<Map<String, Any>> =
+    klerk.specification.registeredViews.map { (type, collection) ->
         mapOf("id" to collection.id.toString(), "type" to type.simpleName!!)
     }
-}
 
 /** The Relay connection arguments, shared by every connection field. */
 private fun addConnectionArguments(field: GraphQLFieldDefinition.Builder): GraphQLFieldDefinition.Builder = field
@@ -561,7 +584,9 @@ private suspend fun <C : KlerkContext, V> modelsDataFetcher(
     val whereMap: Map<String, Any>? = if (whereJson != null) {
         @Suppress("UNCHECKED_CAST")
         jackson.readValue(whereJson, Map::class.java) as Map<String, Any>
-    } else null
+    } else {
+        null
+    }
     val view = klerk.specification.view(ViewID.parse(viewId))
     // The filter goes into the query, so `first: 10` really does return ten matching models when there are ten.
     val result = klerk.read(context) {
@@ -621,10 +646,13 @@ private suspend fun <C : KlerkContext, V> typedModelsDataFetcher(
 ): Map<String, Any?> {
     val context = contextFactory(env.graphQlContext)
     val viewId = env.getArgument<String>("viewId")!!
+
     @Suppress("UNCHECKED_CAST")
     val whereMap = env.getArgument<Map<String, Any>?>("where")
+
     @Suppress("UNCHECKED_CAST")
     val stateFilter = env.getArgument<Map<String, Any>?>("state")
+
     @Suppress("UNCHECKED_CAST")
     val createdAtFilter = env.getArgument<Map<String, Any>?>("createdAt")
     val view = klerk.specification.view(ViewID.parse(viewId))
@@ -689,10 +717,7 @@ private fun <C : KlerkContext, V> genericModelMap(
     )
 }
 
-private fun commandToMap(
-    ref: EventReference,
-    parameters: ObjectSchema<*>?,
-): Map<String, Any?> {
+private fun commandToMap(ref: EventReference, parameters: ObjectSchema<*>?): Map<String, Any?> {
     val params = parameters?.fields?.map { p ->
         mapOf(
             "name" to p.name,

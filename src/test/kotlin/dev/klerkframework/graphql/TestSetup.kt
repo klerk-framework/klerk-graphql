@@ -1,8 +1,6 @@
 package dev.klerkframework.graphql
 
-import dev.klerkframework.klerk.view.asSequenceOrThrow
-import dev.klerkframework.klerk.validation.Valid
-import dev.klerkframework.graphql.AuthorStates.*
+import dev.klerkframework.graphql.AuthorStates.Established
 import dev.klerkframework.graphql.models.Author
 import dev.klerkframework.graphql.models.Book
 import dev.klerkframework.graphql.models.CreateAuthor
@@ -17,53 +15,60 @@ import dev.klerkframework.graphql.models.authorStateMachine
 import dev.klerkframework.graphql.models.bookStateMachine
 import dev.klerkframework.graphql.models.shopStateMachine
 import dev.klerkframework.klerk.ActorIdentity
+import dev.klerkframework.klerk.AuthenticationIdentity
 import dev.klerkframework.klerk.CommandRuleArgs
 import dev.klerkframework.klerk.EventLogRuleArgs
-import dev.klerkframework.klerk.InstanceEventArgs
-import dev.klerkframework.klerk.VoidEventArgs
-import dev.klerkframework.klerk.ModelReadRuleArgs
-import dev.klerkframework.klerk.PropertyReadRuleArgs
-import dev.klerkframework.klerk.AuthenticationIdentity
 import dev.klerkframework.klerk.EventVisibility.External
+import dev.klerkframework.klerk.ExperimentalKlerkApi
+import dev.klerkframework.klerk.InstanceEventArgs
 import dev.klerkframework.klerk.Klerk
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.KlerkSettings
 import dev.klerkframework.klerk.Model
 import dev.klerkframework.klerk.ModelID
 import dev.klerkframework.klerk.ModelIdentity
+import dev.klerkframework.klerk.ModelReadRuleArgs
 import dev.klerkframework.klerk.NegativeAuthorization
 import dev.klerkframework.klerk.NegativeAuthorization.Deny
 import dev.klerkframework.klerk.NegativeAuthorization.Pass
 import dev.klerkframework.klerk.PositiveAuthorization
-import dev.klerkframework.klerk.validation.PropertyCollectionValidity
-import dev.klerkframework.klerk.validation.PropertyCollectionValidity.*
+import dev.klerkframework.klerk.PropertyReadRuleArgs
 import dev.klerkframework.klerk.Specification
 import dev.klerkframework.klerk.SpecificationBuilder
 import dev.klerkframework.klerk.SystemIdentity
 import dev.klerkframework.klerk.Translation
 import dev.klerkframework.klerk.Unauthenticated
+import dev.klerkframework.klerk.VoidEventArgs
 import dev.klerkframework.klerk.VoidEventNoParameters
-import dev.klerkframework.klerk.view.ModelView
-import dev.klerkframework.klerk.view.ModelViews
-import dev.klerkframework.klerk.view.QueryListCursor
-import dev.klerkframework.klerk.view.asSequence
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.CommandToken
-import dev.klerkframework.klerk.command.ProcessingOptions
-import dev.klerkframework.klerk.datatypes.*
+import dev.klerkframework.klerk.datatypes.BooleanContainer
+import dev.klerkframework.klerk.datatypes.DurationContainer
+import dev.klerkframework.klerk.datatypes.FloatContainer
+import dev.klerkframework.klerk.datatypes.GeoPosition
+import dev.klerkframework.klerk.datatypes.GeoPositionContainer
+import dev.klerkframework.klerk.datatypes.InstantContainer
+import dev.klerkframework.klerk.datatypes.IntContainer
+import dev.klerkframework.klerk.datatypes.LongContainer
+import dev.klerkframework.klerk.datatypes.StringContainer
 import dev.klerkframework.klerk.job.JobAgent
 import dev.klerkframework.klerk.job.JobName
 import dev.klerkframework.klerk.job.JobResult
 import dev.klerkframework.klerk.job.JobStepArgs
 import dev.klerkframework.klerk.job.JobType
 import dev.klerkframework.klerk.misc.AlgorithmBuilder
-import dev.klerkframework.klerk.ExperimentalKlerkApi
 import dev.klerkframework.klerk.misc.Decision
 import dev.klerkframework.klerk.misc.FlowChartAlgorithm
 import dev.klerkframework.klerk.read.ModelReader
 import dev.klerkframework.klerk.storage.Persistence
 import dev.klerkframework.klerk.storage.RamStorage
+import dev.klerkframework.klerk.validation.PropertyCollectionValidity
+import dev.klerkframework.klerk.validation.PropertyCollectionValidity.Invalid
 import dev.klerkframework.klerk.validation.PropertyValidity
+import dev.klerkframework.klerk.validation.Valid
+import dev.klerkframework.klerk.view.ModelView
+import dev.klerkframework.klerk.view.ModelViews
+import dev.klerkframework.klerk.view.asSequence
+import dev.klerkframework.klerk.view.asSequenceOrThrow
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -74,8 +79,8 @@ import kotlin.time.Instant
 var onEnterAmateurStateActionCallback: (() -> Unit)? = null
 var onEnterImprovingStateActionCallback: (() -> Unit)? = null
 
-fun createSpecification(views: MyViews): Specification<Context, MyViews> {
-    return SpecificationBuilder<Context, MyViews>(views).build {
+fun createSpecification(views: MyViews): Specification<Context, MyViews> =
+    SpecificationBuilder<Context, MyViews>(views).build {
         managedModels {
             model(Book::class, bookStateMachine(views.authors.all, views), views.books)
             model(Author::class, authorStateMachine(views), views.authors)
@@ -109,33 +114,25 @@ fun createSpecification(views: MyViews): Specification<Context, MyViews> {
         }
         systemContextProvider(::myContextProvider)
     }
-}
 
 fun testSettings(storage: Persistence = RamStorage()): KlerkSettings = KlerkSettings(persistence = storage)
 
-fun myContextProvider(): Context {
-    return Context(SystemIdentity)
-}
+fun myContextProvider(): Context = Context(SystemIdentity)
 
-fun cannotReadAstrid(args: PropertyReadRuleArgs<Context, MyViews>): NegativeAuthorization {
-    return if (args.property is FirstName && args.property.valueWithoutAuthorization == "Astrid") Deny else Pass
-}
+fun cannotReadAstrid(args: PropertyReadRuleArgs<Context, MyViews>): NegativeAuthorization =
+    if (args.property is FirstName && args.property.valueWithoutAuthorization == "Astrid") Deny else Pass
 
-fun cannotReadFax(args: PropertyReadRuleArgs<Context, MyViews>): NegativeAuthorization {
-    return if (args.property is FaxNumber) Deny else Pass
-}
+fun cannotReadFax(args: PropertyReadRuleArgs<Context, MyViews>): NegativeAuthorization =
+    if (args.property is FaxNumber) Deny else Pass
 
-fun unauthenticatedCannotReadAverageScore(args: PropertyReadRuleArgs<Context, MyViews>): NegativeAuthorization {
-    return if (args.property is AverageScore && args.context.actor is Unauthenticated) Deny else Pass
-}
+fun unauthenticatedCannotReadAverageScore(args: PropertyReadRuleArgs<Context, MyViews>): NegativeAuthorization =
+    if (args.property is AverageScore && args.context.actor is Unauthenticated) Deny else Pass
 
-fun unauthenticatedCannotReadBookTitle(args: PropertyReadRuleArgs<Context, MyViews>): NegativeAuthorization {
-    return if (args.property is BookTitle && args.context.actor is Unauthenticated) Deny else Pass
-}
+fun unauthenticatedCannotReadBookTitle(args: PropertyReadRuleArgs<Context, MyViews>): NegativeAuthorization =
+    if (args.property is BookTitle && args.context.actor is Unauthenticated) Deny else Pass
 
-fun canReadAllProperties(args: PropertyReadRuleArgs<Context, MyViews>): PositiveAuthorization {
-    return PositiveAuthorization.Allow
-}
+fun canReadAllProperties(args: PropertyReadRuleArgs<Context, MyViews>): PositiveAuthorization =
+    PositiveAuthorization.Allow
 
 fun unauthenticatedCannotReadAstrid(args: ModelReadRuleArgs<Context, MyViews>): NegativeAuthorization {
     val props = args.model.props
@@ -145,22 +142,14 @@ fun unauthenticatedCannotReadAstrid(args: ModelReadRuleArgs<Context, MyViews>): 
 
 fun `Everybody can do everything`(
     argCommandContextReader: CommandRuleArgs<*, Context, MyViews>,
-): PositiveAuthorization {
-    return PositiveAuthorization.Allow
-}
+): PositiveAuthorization = PositiveAuthorization.Allow
 
+fun `Everybody can read event log`(args: EventLogRuleArgs<Context, MyViews>): PositiveAuthorization =
+    PositiveAuthorization.Allow
 
-fun `Everybody can read event log`(args: EventLogRuleArgs<Context, MyViews>): PositiveAuthorization {
-    return PositiveAuthorization.Allow
-}
+fun `Everybody can read`(args: ModelReadRuleArgs<Context, MyViews>): PositiveAuthorization = PositiveAuthorization.Allow
 
-fun `Everybody can read`(args: ModelReadRuleArgs<Context, MyViews>): PositiveAuthorization {
-    return PositiveAuthorization.Allow
-}
-
-fun pelleCannotReadOnMornings(
-    args: ModelReadRuleArgs<Context, MyViews>,
-): NegativeAuthorization {
+fun pelleCannotReadOnMornings(args: ModelReadRuleArgs<Context, MyViews>): NegativeAuthorization {
     try {
         if (args.context.user?.props?.name?.value.equals("Pelle")) {
             val localTime = args.context.time.toLocalDateTime(TimeZone.currentSystemDefault()).time
@@ -174,9 +163,7 @@ fun pelleCannotReadOnMornings(
 
 class BookCollections : ModelViews<Book, Context>() {
 
-    fun childrensBooks(): List<ModelID<Book>> {
-        return emptyList()
-    }
+    fun childrensBooks(): List<ModelID<Book>> = emptyList()
 }
 
 class AuthorCollections<V>(val allBooks: ModelView<Book, Context>) : ModelViews<Author, Context>() {
@@ -199,21 +186,17 @@ class AuthorCollections<V>(val allBooks: ModelView<Book, Context>) : ModelViews<
             AuthorsWithAtLeastTwoBooks(all, allBooks)
         establishedGreatWithAtLeastTwoBooks.register("medMinst2Böcker")
     }
-
 }
 
 class ReleasePartyPosition(value: GeoPosition) : GeoPositionContainer(value)
 
-//data class Shop(val shopName: ShopName, val owner: Reference<Author>) : CudModel
+// data class Shop(val shopName: ShopName, val owner: Reference<Author>) : CudModel
 
 class ShopName(value: String) : StringContainer(value) {
     override val minLength: Int = 1
     override val maxLength: Int = 100
     override val maxLines: Int = 1
 }
-
-
-
 
 // A plain String cursor is used (rather than a custom data class) because this module has no kotlinx.serialization
 // compiler plugin applied, and String has a serializer built into kotlinx-serialization-core without it.
@@ -227,7 +210,6 @@ object MyOtherJob : JobType.Local<String, Context, MyViews>() {
     }
 }
 
-
 fun eventsToDeleteAuthorAndBooks(args: InstanceEventArgs<Author, Nothing?, Context, MyViews>): List<Command<Any, Any>> {
     args.reader.apply {
         val result: MutableList<Command<Any, Any>> = mutableListOf()
@@ -240,7 +222,7 @@ fun eventsToDeleteAuthorAndBooks(args: InstanceEventArgs<Author, Nothing?, Conte
         @Suppress("UNCHECKED_CAST")
         result.add(
             Command(DeleteAuthor, requireNotNull(args.model.id))
-                    as Command<Any, Any>,
+                as Command<Any, Any>,
         )
 
         return result
@@ -256,15 +238,10 @@ fun newAuthor(args: VoidEventArgs<Author, CreateAuthorParams, Context, MyViews>)
     )
 }
 
-fun newAuthor2(args: VoidEventArgs<Author, Nothing?, Context, MyViews>): Author {
-    return Author(FirstName("Auto"), LastName("Created"), Address(Street("Somewhere")))
-}
+fun newAuthor2(args: VoidEventArgs<Author, Nothing?, Context, MyViews>): Author =
+    Author(FirstName("Auto"), LastName("Created"), Address(Street("Somewhere")))
 
-
-fun updateAuthor(args: InstanceEventArgs<Author, Author, Context, MyViews>): Author {
-    return args.command.params
-}
-
+fun updateAuthor(args: InstanceEventArgs<Author, Author, Context, MyViews>): Author = args.command.params
 
 fun onlyAuthenticationIdentityCanCreateDaniel(
     args: VoidEventArgs<Author, CreateAuthorParams, Context, MyViews>,
@@ -287,9 +264,8 @@ fun secretTokenShouldBeZeroIfNameStartsWithM(
     return if (params.firstName.value.startsWith("M") && params.secretToken.value != 0L) Invalid() else Valid
 }
 
-fun preventUnauthenticated(context: Context): PropertyCollectionValidity {
-    return if (context.actor == Unauthenticated) Invalid("Must log in") else Valid
-}
+fun preventUnauthenticated(context: Context): PropertyCollectionValidity =
+    if (context.actor == Unauthenticated) Invalid("Must log in") else Valid
 
 fun onlyAllowAuthorNameAstridIfThereIsNoRowling(
     args: VoidEventArgs<Author, CreateAuthorParams, Context, MyViews>,
@@ -410,7 +386,6 @@ class EvenIntContainer(value: Int) : IntContainer(value) {
         }
         return PropertyValidity.Invalid("Must be even")
     }
-
 }
 
 class FirstName(value: String) : StringContainer(value) {
@@ -432,9 +407,7 @@ class BookTitle(value: String) : StringContainer(value) {
     override val regexPattern = ".*"
     override val validators = setOf(::`title must be catchy`)
 
-    private fun `title must be catchy`(title: String, translation: Translation): PropertyValidity {
-        return Valid
-    }
+    private fun `title must be catchy`(title: String, translation: Translation): PropertyValidity = Valid
 }
 
 class BookTag(value: String) : StringContainer(value) {
@@ -455,9 +428,7 @@ class Quantity(value: Int) : IntContainer(value) {
     override val max: Int = Int.MAX_VALUE
 }
 
-class BookWrittenAt(value: Instant) : InstantContainer(value) {
-
-}
+class BookWrittenAt(value: Instant) : InstantContainer(value)
 
 class ReadingTime(value: Duration) : DurationContainer(value)
 
@@ -492,13 +463,9 @@ sealed class AlwaysFalseDecisions(
     override val function: (InstanceEventArgs<Author, CreateAuthorParams, Context, MyViews>) -> Boolean,
 ) : Decision<Boolean, InstanceEventArgs<Author, CreateAuthorParams, Context, MyViews>> {
     data object Something : AlwaysFalseDecisions("This will always be false", ::alwaysFalse)
-
 }
 
-fun alwaysFalse(args: InstanceEventArgs<Author, CreateAuthorParams, Context, MyViews>): Boolean {
-    return false
-}
-
+fun alwaysFalse(args: InstanceEventArgs<Author, CreateAuthorParams, Context, MyViews>): Boolean = false
 
 @OptIn(ExperimentalKlerkApi::class)
 object AlwaysFalseAlgorithm :
@@ -526,18 +493,14 @@ data class Context(
 ) : KlerkContext {
 
     companion object {
-        fun fromUser(user: Model<User>): Context {
-            return Context(ModelIdentity(user), user = user)
-        }
+        fun fromUser(user: Model<User>): Context = Context(ModelIdentity(user), user = user)
 
         fun unauthenticated(): Context = Context(Unauthenticated)
 
         fun authenticationIdentity(): Context = Context(AuthenticationIdentity)
 
         fun system(): Context = Context(SystemIdentity)
-
     }
-
 }
 
 data class User(val name: FirstName)
@@ -548,11 +511,9 @@ object MyJob : JobType.Local<String, Context, MyViews>() {
     override val name: JobName = JobName("my-job")
     override val agent: JobAgent = JobAgent.System
 
-    override suspend fun step(args: JobStepArgs.Local<String, Context, MyViews>): JobResult<String, Context, MyViews> {
-        return JobResult.Success()
-    }
+    override suspend fun step(args: JobStepArgs.Local<String, Context, MyViews>): JobResult<String, Context, MyViews> =
+        JobResult.Success()
 }
-
 
 class AverageScore(value: Float) : FloatContainer(value) {
     override val min: Float = 0f
@@ -575,5 +536,4 @@ class AuthorsWithAtLeastTwoBooks<V>(
 
     override fun <V> contains(value: ModelID<*>, reader: ModelReader<Context, V>): Boolean =
         memberIds(reader).any { it.value == value.value }
-
 }
